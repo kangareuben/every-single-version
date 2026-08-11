@@ -37,19 +37,26 @@ export default function Home() {
           Search is not live yet. Come back soon.
         </p>
 
-        <div className="flex w-full flex-col items-center gap-2">
+        <div className="flex w-full flex-col items-center gap-4">
           <p className="text-sm text-zinc-500 dark:text-zinc-500">
-            Example result:
+            Example results:
           </p>
-          <div className="aspect-video w-full overflow-hidden rounded-lg">
-            <iframe
-              className="h-full w-full"
-              src="https://www.youtube.com/embed/dQw4w9WgXcQ"
-              title="Example YouTube video result"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-          </div>
+          {["r2dUHg4-TRc", "GIMVm8a9to8", "Ny2uEaNt7L8"].map((videoId, i) => (
+            <div key={videoId} className="flex w-full flex-col gap-1">
+              <p className="text-left text-xs text-zinc-400 dark:text-zinc-600">
+                Version {i + 1}
+              </p>
+              <div className="aspect-video w-full overflow-hidden rounded-lg">
+                <iframe
+                  className="h-full w-full"
+                  src={`https://www.youtube.com/embed/${videoId}`}
+                  title={`Example YouTube video result ${i + 1}`}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            </div>
+          ))}
         </div>
 
         <div className="flex gap-4 text-sm text-zinc-500 dark:text-zinc-500">
