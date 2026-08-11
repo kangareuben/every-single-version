@@ -41,7 +41,7 @@ export default function Home() {
           <p className="text-sm text-zinc-500 dark:text-zinc-500">
             Example results:
           </p>
-          {["r2dUHg4-TRc", "GIMVm8a9to8", "Ny2uEaNt7L8"].map((videoId, i) => (
+          {["ETdDMHx7oGU", "GIMVm8a9to8", "Ny2uEaNt7L8"].map((videoId, i) => (
             <div key={videoId} className="flex w-full flex-col gap-1">
               <p className="text-left text-xs text-zinc-400 dark:text-zinc-600">
                 Version {i + 1}
