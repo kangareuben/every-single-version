@@ -36,6 +36,22 @@ export default function Home() {
         <p className="text-sm text-zinc-500 dark:text-zinc-500">
           Search is not live yet. Come back soon.
         </p>
+
+        <div className="flex w-full flex-col items-center gap-2">
+          <p className="text-sm text-zinc-500 dark:text-zinc-500">
+            Example result:
+          </p>
+          <div className="aspect-video w-full overflow-hidden rounded-lg">
+            <iframe
+              className="h-full w-full"
+              src="https://www.youtube.com/embed/dQw4w9WgXcQ"
+              title="Example YouTube video result"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        </div>
+
         <div className="flex gap-4 text-sm text-zinc-500 dark:text-zinc-500">
           <Link href="/privacy" className="underline">
             Privacy Policy
