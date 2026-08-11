@@ -27,9 +27,37 @@ export default function PrivacyPage() {
 
       <h2 className="text-xl font-medium mt-4">Third parties</h2>
       <p>
-        Video playback is embedded directly from YouTube. Your interaction
-        with embedded players is subject to Google&apos;s own privacy
-        policy.
+        Video playback is embedded directly from YouTube using the YouTube
+        API Services. Your interaction with embedded players is subject to
+        the{" "}
+        <a
+          href="https://www.youtube.com/t/terms"
+          className="underline"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          YouTube Terms of Service
+        </a>{" "}
+        and{" "}
+        <a
+          href="https://policies.google.com/privacy"
+          className="underline"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Google Privacy Policy
+        </a>
+        .
+      </p>
+
+      <h2 className="text-xl font-medium mt-4">Data deletion</h2>
+      <p>
+        Because there are no accounts, there is no personal profile to
+        delete. The only data we retain that traces back to a visitor is
+        the one-way IP hash described above, which cannot be reversed to
+        an IP address and is automatically expired after 30 days. To
+        request early removal of a specific flag record, email us at the
+        address below with the approximate time and video you flagged.
       </p>
 
       <h2 className="text-xl font-medium mt-4">Contact</h2>
