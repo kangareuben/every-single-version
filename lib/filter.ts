@@ -100,21 +100,25 @@ export function filterResult(
     return { pass: false, reason: "song name not found", isMusicCategory };
   }
 
-  // The original studio upload (matches song + artist, no cover-signal
-  // keyword needed) counts as a version too, not just covers/live/etc.
   const artistWords = artistName
     ? normalize(artistName).toLowerCase().split(" ").filter(Boolean)
     : [];
-  const isPlausibleOriginal =
-    artistWords.length > 0 && containsAllWords(text, artistWords);
-  const hasCoverSignal = containsAnyKeyword(text, COVER_SIGNAL_KEYWORDS);
 
-  if (!isPlausibleOriginal && !hasCoverSignal) {
-    return {
-      pass: false,
-      reason: "no cover signal and no artist match",
-      isMusicCategory,
-    };
+  if (artistWords.length > 0) {
+    // An artist was specified — require some evidence it's actually them,
+    // regardless of cover-signal keywords. Otherwise a "live"/"cover" tag
+    // on a different artist's same-titled song passes for free (real bug:
+    // multiple unrelated songs share generic titles like "Fluorescent
+    // Lights" often enough that this isn't an edge case).
+    if (!containsAllWords(text, artistWords)) {
+      return { pass: false, reason: "artist not found", isMusicCategory };
+    }
+  } else {
+    // No artist given — cover-signal keyword is the only signal available
+    // besides the song name match already checked above.
+    if (!containsAnyKeyword(text, COVER_SIGNAL_KEYWORDS)) {
+      return { pass: false, reason: "no cover signal", isMusicCategory };
+    }
   }
 
   return { pass: true, isMusicCategory };
