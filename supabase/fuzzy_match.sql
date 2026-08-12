@@ -3,7 +3,7 @@
 
 create or replace function match_songs(
   search_name text,
-  match_threshold float default 0.3,
+  match_threshold float default 0.4,
   match_count int default 5
 )
 returns table (
