@@ -2,7 +2,8 @@ import { after } from "next/server";
 import { supabaseAnon, supabaseService } from "@/lib/supabase";
 import { normalize } from "@/lib/normalize";
 import { linkArtistToSong } from "@/lib/artists";
-import { crawlSong } from "@/lib/crawl";
+import { crawlSong, fetchBaseQueryResults, hasStrongMatch } from "@/lib/crawl";
+import type { YoutubeSearchResult } from "@/lib/youtube";
 
 const STALE_HOURS = 24;
 
@@ -42,6 +43,33 @@ export async function GET(request: Request) {
     songId = candidate.id;
     canonicalName = candidate.canonical_name;
   } else {
+    // Before committing to this as a new song, check whether the fields
+    // might be swapped (song/artist reversed) — e.g. "song=Wu-Tang Clan,
+    // artist=Cream" instead of "song=Cream, artist=Wu-Tang Clan". Only
+    // costs an extra search.list call when the as-given ordering is
+    // already a weak match, so it doesn't add cost to the common case.
+    let prefetchedBaseResults: YoutubeSearchResult[] | undefined;
+
+    if (artistQuery) {
+      const trimmedSong = songQuery.trim();
+      const trimmedArtist = artistQuery.trim();
+      const baseResults = await fetchBaseQueryResults(trimmedSong, trimmedArtist);
+
+      if (!hasStrongMatch(baseResults, trimmedSong, trimmedArtist)) {
+        const swappedResults = await fetchBaseQueryResults(trimmedArtist, trimmedSong);
+        if (hasStrongMatch(swappedResults, trimmedArtist, trimmedSong)) {
+          return Response.json({
+            status: "possible_swap",
+            suggestedSong: trimmedArtist,
+            suggestedArtist: trimmedSong,
+            message: `Did you mean "${trimmedArtist}" by "${trimmedSong}"?`,
+          });
+        }
+      }
+
+      prefetchedBaseResults = baseResults;
+    }
+
     isNewSong = true;
     const { data: newSong, error: insertSongError } = await supabaseService
       .from("songs")
@@ -60,7 +88,7 @@ export async function GET(request: Request) {
     canonicalName = newSong.canonical_name;
 
     try {
-      await crawlSong(songId, canonicalName, artistQuery);
+      await crawlSong(songId, canonicalName, artistQuery, prefetchedBaseResults);
     } catch (err) {
       console.error("crawl failed:", err);
       return Response.json(

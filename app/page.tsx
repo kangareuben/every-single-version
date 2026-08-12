@@ -16,12 +16,20 @@ interface SearchResponse {
   message?: string;
   videos?: Video[];
   error?: string;
+  suggestedSong?: string;
+  suggestedArtist?: string;
 }
 
 type SearchState =
   | { phase: "idle" }
   | { phase: "loading" }
   | { phase: "error"; message: string }
+  | {
+      phase: "swap_suggested";
+      suggestedSong: string;
+      suggestedArtist: string;
+      message: string;
+    }
   | { phase: "results"; canonicalName: string; videos: Video[] };
 
 // Loading a live YouTube iframe player per result doesn't scale once a
@@ -78,18 +86,25 @@ export default function Home() {
   const [artistInput, setArtistInput] = useState("");
   const [state, setState] = useState<SearchState>({ phase: "idle" });
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!songInput.trim()) return;
-
+  async function runSearch(song: string, artist: string) {
     setState({ phase: "loading" });
 
-    const params = new URLSearchParams({ song: songInput.trim() });
-    if (artistInput.trim()) params.set("artist", artistInput.trim());
+    const params = new URLSearchParams({ song });
+    if (artist) params.set("artist", artist);
 
     try {
       const res = await fetch(`/api/search?${params.toString()}`);
       const data: SearchResponse = await res.json();
+
+      if (data.status === "possible_swap" && data.suggestedSong && data.suggestedArtist) {
+        setState({
+          phase: "swap_suggested",
+          suggestedSong: data.suggestedSong,
+          suggestedArtist: data.suggestedArtist,
+          message: data.message ?? "Did you mean to swap the song and artist?",
+        });
+        return;
+      }
 
       if (!res.ok || data.status === "crawl_failed" || data.error) {
         setState({
@@ -101,12 +116,24 @@ export default function Home() {
 
       setState({
         phase: "results",
-        canonicalName: data.canonicalName ?? songInput.trim(),
+        canonicalName: data.canonicalName ?? song,
         videos: data.videos ?? [],
       });
     } catch {
       setState({ phase: "error", message: "Couldn't reach the server. Try again." });
     }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!songInput.trim()) return;
+    await runSearch(songInput.trim(), artistInput.trim());
+  }
+
+  async function handleSwapConfirm(song: string, artist: string) {
+    setSongInput(song);
+    setArtistInput(artist);
+    await runSearch(song, artist);
   }
 
   return (
@@ -159,6 +186,24 @@ export default function Home() {
           <p className="text-sm text-red-600 dark:text-red-400">
             {state.message}
           </p>
+        )}
+
+        {state.phase === "swap_suggested" && (
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              {state.message}
+            </p>
+            <button
+              type="button"
+              onClick={() =>
+                handleSwapConfirm(state.suggestedSong, state.suggestedArtist)
+              }
+              className="rounded-full border border-black/[.08] px-5 py-2 text-sm font-medium text-black hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-50 dark:hover:bg-white/[.08]"
+            >
+              Search &quot;{state.suggestedSong}&quot; by &quot;
+              {state.suggestedArtist}&quot; instead
+            </button>
+          </div>
         )}
 
         {state.phase === "results" && state.videos.length === 0 && (

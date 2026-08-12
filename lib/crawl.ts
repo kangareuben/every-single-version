@@ -15,6 +15,14 @@ const STRONG_MATCH_THRESHOLD = 0.8;
 // before filtering. Costs ~6x the search.list quota of a single query.
 const QUERY_KEYWORD_VARIANTS = ["cover", "live", "acoustic", "instrumental", "karaoke"];
 
+export async function fetchBaseQueryResults(
+  songName: string,
+  artistHint: string | null,
+): Promise<YoutubeSearchResult[]> {
+  const query = artistHint ? `${songName} ${artistHint}` : songName;
+  return searchVideos(query, RESULTS_PER_QUERY);
+}
+
 // Guards against generic/obscure searches (e.g. a one-word song title by an
 // artist with no real YouTube presence) where per-video filtering is too
 // weak on its own — a single common word can satisfy it against totally
@@ -22,7 +30,7 @@ const QUERY_KEYWORD_VARIANTS = ["cover", "live", "acoustic", "instrumental", "ka
 // description is a much noisier signal (tangential mentions, unrelated
 // comparisons) that can pass this check for content about something else
 // entirely.
-function hasStrongMatch(
+export function hasStrongMatch(
   results: YoutubeSearchResult[],
   songName: string,
   artistHint: string | null,
@@ -79,6 +87,7 @@ export async function crawlSong(
   songId: string,
   canonicalName: string,
   artistHint: string | null,
+  prefetchedBaseResults?: YoutubeSearchResult[],
 ): Promise<void> {
   const gotLock = await acquireCrawlLock(songId);
   if (!gotLock) return; // another crawl is already in progress for this song
@@ -89,7 +98,9 @@ export async function crawlSong(
       ? `${canonicalName} ${artistHint}`
       : canonicalName;
 
-    const baseResults = await searchVideos(baseQuery, RESULTS_PER_QUERY);
+    const baseResults =
+      prefetchedBaseResults ??
+      (await fetchBaseQueryResults(canonicalName, artistHint));
 
     if (!hasStrongMatch(baseResults, canonicalName, artistHint)) {
       // Nothing in the base query looks like a genuine match — likely an
