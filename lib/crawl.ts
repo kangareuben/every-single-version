@@ -13,7 +13,19 @@ const STRONG_MATCH_THRESHOLD = 0.8;
 // uploads in YouTube's ranking, burying genuine covers past the first page.
 // Running these variants and merging results surfaces a much wider pool
 // before filtering. Costs ~6x the search.list quota of a single query.
-const QUERY_KEYWORD_VARIANTS = ["cover", "live", "acoustic", "instrumental", "karaoke"];
+//
+// "karaoke" deliberately excluded: karaoke-specialist channels upload
+// prolifically (every pitch/key as a separate video), so a dedicated
+// karaoke query floods results out of proportion to genuine cover
+// diversity — confirmed on "Halo" by Beyoncé, 21 of 67 results (31%)
+// were karaoke, several near-duplicates from the same channel in
+// different keys. Karaoke videos surfacing via the other queries still
+// pass filtering (it remains a cover-signal keyword) but are capped
+// below, see KARAOKE_CAP.
+const QUERY_KEYWORD_VARIANTS = ["cover", "live", "acoustic", "instrumental"];
+
+const KARAOKE_CAP = 5;
+const KARAOKE_PATTERN = /karaoke/i;
 
 export async function fetchBaseQueryResults(
   songName: string,
@@ -129,7 +141,7 @@ export async function crawlSong(
     const results = [...uniqueResults.values()];
     const details = await getVideoDetails(results.map((r) => r.videoId));
 
-    const passingResults = results.filter((result) => {
+    const filteredResults = results.filter((result) => {
       const detail = details.get(result.videoId);
       return filterResult(canonicalName, artistHint, {
         title: result.title,
@@ -138,6 +150,10 @@ export async function crawlSong(
         categoryId: detail?.categoryId ?? null,
       }).pass;
     });
+
+    const karaoke = filteredResults.filter((r) => KARAOKE_PATTERN.test(r.title));
+    const nonKaraoke = filteredResults.filter((r) => !KARAOKE_PATTERN.test(r.title));
+    const passingResults = [...nonKaraoke, ...karaoke.slice(0, KARAOKE_CAP)];
 
     if (passingResults.length > 0) {
       const { error: insertError } = await supabaseService.from("videos").upsert(
