@@ -1,17 +1,43 @@
 import { supabaseService } from "./supabase";
-import { searchVideos, getVideoDetails } from "./youtube";
+import { searchVideos, getVideoDetails, type YoutubeSearchResult } from "./youtube";
 import { filterResult } from "./filter";
 import { parseArtistFromTitle } from "./artist-parse";
 import { linkArtistToSong } from "./artists";
+import { wordsOf, wordOverlapRatio } from "./normalize";
 
 const LOCK_STALE_MINUTES = 10;
 const RESULTS_PER_QUERY = 50; // API max per call; same 100-unit cost regardless
+const STRONG_MATCH_THRESHOLD = 0.8;
 
 // One query alone (bare "song artist") strongly over-favors official/popular
 // uploads in YouTube's ranking, burying genuine covers past the first page.
 // Running these variants and merging results surfaces a much wider pool
 // before filtering. Costs ~6x the search.list quota of a single query.
 const QUERY_KEYWORD_VARIANTS = ["cover", "live", "acoustic", "instrumental", "karaoke"];
+
+// Guards against generic/obscure searches (e.g. a one-word song title by an
+// artist with no real YouTube presence) where per-video filtering is too
+// weak on its own — a single common word can satisfy it against totally
+// unrelated content. Checked against the TITLE only, not description: the
+// description is a much noisier signal (tangential mentions, unrelated
+// comparisons) that can pass this check for content about something else
+// entirely.
+function hasStrongMatch(
+  results: YoutubeSearchResult[],
+  songName: string,
+  artistHint: string | null,
+): boolean {
+  const songWords = wordsOf(songName);
+  const artistWords = artistHint ? wordsOf(artistHint) : [];
+
+  return results.some((result) => {
+    const songMatch = wordOverlapRatio(result.title, songWords) >= STRONG_MATCH_THRESHOLD;
+    const artistMatch =
+      artistWords.length === 0 ||
+      wordOverlapRatio(result.title, artistWords) >= STRONG_MATCH_THRESHOLD;
+    return songMatch && artistMatch;
+  });
+}
 
 // Guards against two concurrent crawls of the same song (e.g. two users
 // searching the same brand-new song at once). A crawl that crashed
@@ -62,17 +88,26 @@ export async function crawlSong(
     const baseQuery = artistHint
       ? `${canonicalName} ${artistHint}`
       : canonicalName;
-    const queries = [
-      baseQuery,
-      ...QUERY_KEYWORD_VARIANTS.map((keyword) => `${baseQuery} ${keyword}`),
-    ];
 
-    const resultBatches = await Promise.all(
-      queries.map((query) => searchVideos(query, RESULTS_PER_QUERY)),
+    const baseResults = await searchVideos(baseQuery, RESULTS_PER_QUERY);
+
+    if (!hasStrongMatch(baseResults, canonicalName, artistHint)) {
+      // Nothing in the base query looks like a genuine match — likely an
+      // obscure/nonexistent song-artist combo. Abort before spending quota
+      // on the keyword-variant queries, and insert nothing so we don't
+      // pollute the catalog with loosely-matched noise.
+      succeeded = true; // confirmed empty, not a failure
+      return;
+    }
+
+    const variantBatches = await Promise.all(
+      QUERY_KEYWORD_VARIANTS.map((keyword) =>
+        searchVideos(`${baseQuery} ${keyword}`, RESULTS_PER_QUERY),
+      ),
     );
 
-    const uniqueResults = new Map<string, (typeof resultBatches)[number][number]>();
-    for (const batch of resultBatches) {
+    const uniqueResults = new Map<string, YoutubeSearchResult>();
+    for (const batch of [baseResults, ...variantBatches]) {
       for (const result of batch) {
         if (!uniqueResults.has(result.videoId)) {
           uniqueResults.set(result.videoId, result);
@@ -83,39 +118,39 @@ export async function crawlSong(
     const results = [...uniqueResults.values()];
     const details = await getVideoDetails(results.map((r) => r.videoId));
 
-    for (const result of results) {
+    const passingResults = results.filter((result) => {
       const detail = details.get(result.videoId);
-      const filterOutcome = filterResult(canonicalName, artistHint, {
+      return filterResult(canonicalName, artistHint, {
         title: result.title,
         description: result.description,
         durationSeconds: detail?.durationSeconds ?? null,
         categoryId: detail?.categoryId ?? null,
-      });
+      }).pass;
+    });
 
-      if (!filterOutcome.pass) continue;
-
-      const { error: insertError } = await supabaseService
-        .from("videos")
-        .upsert(
-          {
-            song_id: songId,
-            video_id: result.videoId,
-            title: result.title,
-            channel_title: result.channelTitle,
-          },
-          { onConflict: "song_id,video_id", ignoreDuplicates: true },
-        );
+    if (passingResults.length > 0) {
+      const { error: insertError } = await supabaseService.from("videos").upsert(
+        passingResults.map((result) => ({
+          song_id: songId,
+          video_id: result.videoId,
+          title: result.title,
+          channel_title: result.channelTitle,
+        })),
+        { onConflict: "song_id,video_id", ignoreDuplicates: true },
+      );
       if (insertError) console.error("crawlSong video insert:", insertError);
+    }
 
+    const artistNamesToLink = new Set<string>();
+    for (const result of passingResults) {
       const parsedArtist = parseArtistFromTitle(result.title, canonicalName);
-      if (parsedArtist) {
-        await linkArtistToSong(songId, parsedArtist);
-      }
+      if (parsedArtist) artistNamesToLink.add(parsedArtist);
     }
+    if (artistHint) artistNamesToLink.add(artistHint);
 
-    if (artistHint) {
-      await linkArtistToSong(songId, artistHint);
-    }
+    await Promise.all(
+      [...artistNamesToLink].map((name) => linkArtistToSong(songId, name)),
+    );
 
     succeeded = true;
   } finally {

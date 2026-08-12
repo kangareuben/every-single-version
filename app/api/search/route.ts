@@ -6,6 +6,11 @@ import { crawlSong } from "@/lib/crawl";
 
 const STALE_HOURS = 24;
 
+// Safety margin for larger crawls (more results = more DB writes). Hobby
+// plan may cap this lower regardless — worth checking the Vercel dashboard
+// if new-song searches ever time out in production.
+export const maxDuration = 60;
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const songQuery = url.searchParams.get("song");

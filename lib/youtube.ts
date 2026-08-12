@@ -75,19 +75,27 @@ export async function getVideoDetails(
   const result = new Map<string, YoutubeVideoDetails>();
   if (videoIds.length === 0) return result;
 
+  const batches: string[][] = [];
   for (let i = 0; i < videoIds.length; i += VIDEOS_LIST_BATCH_SIZE) {
-    const batch = videoIds.slice(i, i + VIDEOS_LIST_BATCH_SIZE);
+    batches.push(videoIds.slice(i, i + VIDEOS_LIST_BATCH_SIZE));
+  }
 
-    const url = new URL(`${BASE}/videos`);
-    url.searchParams.set("part", "contentDetails,snippet");
-    url.searchParams.set("id", batch.join(","));
-    url.searchParams.set("key", process.env.YOUTUBE_API_KEY!);
+  const batchResults = await Promise.all(
+    batches.map(async (batch) => {
+      const url = new URL(`${BASE}/videos`);
+      url.searchParams.set("part", "contentDetails,snippet");
+      url.searchParams.set("id", batch.join(","));
+      url.searchParams.set("key", process.env.YOUTUBE_API_KEY!);
 
-    const res = await fetch(url.toString());
-    if (!res.ok) {
-      throw new Error(`YouTube videos.list failed: ${res.status} ${await res.text()}`);
-    }
-    const data = await res.json();
+      const res = await fetch(url.toString());
+      if (!res.ok) {
+        throw new Error(`YouTube videos.list failed: ${res.status} ${await res.text()}`);
+      }
+      return res.json();
+    }),
+  );
+
+  for (const data of batchResults) {
     for (const item of data.items ?? []) {
       result.set(item.id, {
         durationSeconds: parseIso8601Duration(item.contentDetails.duration),
