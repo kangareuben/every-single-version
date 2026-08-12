@@ -24,6 +24,55 @@ type SearchState =
   | { phase: "error"; message: string }
   | { phase: "results"; canonicalName: string; videos: Video[] };
 
+// Loading a live YouTube iframe player per result doesn't scale once a
+// song has dozens/hundreds of versions — each iframe pulls its own player
+// bootstrap, and the browser (and YouTube itself) chokes on that many at
+// once. Show a static thumbnail by default, only mount the real embed
+// once someone actually clicks to play it.
+function VideoCard({ video }: { video: Video }) {
+  const [playing, setPlaying] = useState(false);
+
+  return (
+    <div className="flex w-full flex-col gap-1">
+      <p className="text-left text-xs text-zinc-400 dark:text-zinc-600">
+        {video.title} — {video.channel_title}
+      </p>
+      <div className="aspect-video w-full overflow-hidden rounded-lg bg-black">
+        {playing ? (
+          <iframe
+            className="h-full w-full"
+            src={`https://www.youtube.com/embed/${video.video_id}?autoplay=1`}
+            title={video.title}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element -- external
+          // YouTube-hosted thumbnail, not a local/optimizable asset
+          <button
+            type="button"
+            onClick={() => setPlaying(true)}
+            className="group relative h-full w-full"
+            aria-label={`Play ${video.title}`}
+          >
+            <img
+              src={`https://img.youtube.com/vi/${video.video_id}/mqdefault.jpg`}
+              alt={video.title}
+              loading="lazy"
+              className="h-full w-full object-cover"
+            />
+            <span className="absolute inset-0 flex items-center justify-center bg-black/20 transition-colors group-hover:bg-black/40">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/60 text-2xl text-white">
+                ▶
+              </span>
+            </span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [songInput, setSongInput] = useState("");
   const [artistInput, setArtistInput] = useState("");
@@ -126,20 +175,7 @@ export default function Home() {
               {state.canonicalName}&quot;:
             </p>
             {state.videos.map((video) => (
-              <div key={video.id} className="flex w-full flex-col gap-1">
-                <p className="text-left text-xs text-zinc-400 dark:text-zinc-600">
-                  {video.title} — {video.channel_title}
-                </p>
-                <div className="aspect-video w-full overflow-hidden rounded-lg">
-                  <iframe
-                    className="h-full w-full"
-                    src={`https://www.youtube.com/embed/${video.video_id}`}
-                    title={video.title}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                </div>
-              </div>
+              <VideoCard key={video.id} video={video} />
             ))}
           </div>
         )}
