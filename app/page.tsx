@@ -32,6 +32,59 @@ type SearchState =
     }
   | { phase: "results"; canonicalName: string; videos: Video[] };
 
+function FlagButton({ videoId }: { videoId: string }) {
+  const [state, setState] = useState<"idle" | "flagging" | "flagged" | "error">(
+    "idle",
+  );
+  const [errorMessage, setErrorMessage] = useState("");
+
+  async function handleFlag() {
+    setState("flagging");
+    try {
+      const res = await fetch("/api/flag", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoId }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMessage(data.error ?? "Couldn't flag this.");
+        setState("error");
+        return;
+      }
+
+      setState("flagged");
+    } catch {
+      setErrorMessage("Couldn't reach the server.");
+      setState("error");
+    }
+  }
+
+  if (state === "flagged") {
+    return (
+      <span className="shrink-0 text-xs text-zinc-400 dark:text-zinc-600">
+        Flagged, thanks
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleFlag}
+      disabled={state === "flagging"}
+      className="shrink-0 text-xs text-zinc-400 underline hover:text-zinc-600 disabled:opacity-50 dark:text-zinc-600 dark:hover:text-zinc-300"
+    >
+      {state === "flagging"
+        ? "Flagging…"
+        : state === "error"
+          ? errorMessage
+          : "Flag as incorrect"}
+    </button>
+  );
+}
+
 // Loading a live YouTube iframe player per result doesn't scale once a
 // song has dozens/hundreds of versions — each iframe pulls its own player
 // bootstrap, and the browser (and YouTube itself) chokes on that many at
@@ -42,9 +95,12 @@ function VideoCard({ video }: { video: Video }) {
 
   return (
     <div className="flex w-full flex-col gap-1">
-      <p className="text-left text-xs text-zinc-400 dark:text-zinc-600">
-        {video.title} — {video.channel_title}
-      </p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-left text-xs text-zinc-400 dark:text-zinc-600">
+          {video.title} — {video.channel_title}
+        </p>
+        <FlagButton videoId={video.id} />
+      </div>
       <div className="aspect-video w-full overflow-hidden rounded-lg bg-black">
         {playing ? (
           <iframe
