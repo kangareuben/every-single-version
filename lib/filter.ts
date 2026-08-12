@@ -1,4 +1,4 @@
-import { normalize } from "./normalize";
+import { normalize, wordsOf } from "./normalize";
 
 // Starting point per the plan, not final — tune against real search
 // results once the crawl job has run against a variety of songs.
@@ -58,6 +58,21 @@ function containsAnyKeyword(haystack: string, keywords: string[]): boolean {
   return keywords.some((keyword) => lower.includes(keyword));
 }
 
+// Index in `words` where `phrase` first occurs as a contiguous run, or
+// null if it doesn't appear as a clean phrase (only scattered, or absent).
+function phraseIndex(words: string[], phrase: string[]): number | null {
+  if (phrase.length === 0) return null;
+  outer: for (let i = 0; i <= words.length - phrase.length; i++) {
+    for (let j = 0; j < phrase.length; j++) {
+      if (words[i + j] !== phrase[j]) continue outer;
+    }
+    return i;
+  }
+  return null;
+}
+
+const PROXIMITY_SLACK_WORDS = 6;
+
 export interface FilterCandidate {
   title: string;
   description: string;
@@ -95,23 +110,48 @@ export function filterResult(
     return { pass: false, reason: "duration out of range", isMusicCategory };
   }
 
-  const songWords = normalize(songName).toLowerCase().split(" ").filter(Boolean);
-  if (!containsAllWords(text, songWords)) {
-    return { pass: false, reason: "song name not found", isMusicCategory };
+  const songWords = wordsOf(songName);
+
+  // Song name (and, below, artist name) must appear in the TITLE, not just
+  // the description. Description is a much noisier signal — real videos
+  // often mention unrelated songs/artists there in passing (a riff
+  // comparison, a "similar artists" blurb), which is enough to falsely
+  // satisfy a bag-of-words check against title+description combined.
+  if (!containsAllWords(candidate.title, songWords)) {
+    return { pass: false, reason: "song name not in title", isMusicCategory };
   }
 
-  const artistWords = artistName
-    ? normalize(artistName).toLowerCase().split(" ").filter(Boolean)
-    : [];
+  const artistWords = artistName ? wordsOf(artistName) : [];
 
   if (artistWords.length > 0) {
     // An artist was specified — require some evidence it's actually them,
     // regardless of cover-signal keywords. Otherwise a "live"/"cover" tag
     // on a different artist's same-titled song passes for free (real bug:
-    // multiple unrelated songs share generic titles like "Fluorescent
-    // Lights" often enough that this isn't an edge case).
-    if (!containsAllWords(text, artistWords)) {
-      return { pass: false, reason: "artist not found", isMusicCategory };
+    // multiple unrelated songs share generic titles often enough that
+    // this isn't an edge case).
+    if (!containsAllWords(candidate.title, artistWords)) {
+      return { pass: false, reason: "artist not in title", isMusicCategory };
+    }
+
+    // Both song and artist words are somewhere in the title, but could be
+    // coincidental — e.g. a product listing that happens to mention
+    // "fluorescent light" and, in an unrelated clause much later, "stars".
+    // If the song name forms a clean phrase in the title, require the
+    // artist to appear reasonably close to it, not just anywhere.
+    const titleWords = wordsOf(candidate.title);
+    const songStart = phraseIndex(titleWords, songWords);
+    if (songStart !== null) {
+      const windowStart = Math.max(0, songStart - PROXIMITY_SLACK_WORDS);
+      const windowEnd = songStart + songWords.length + PROXIMITY_SLACK_WORDS;
+      const nearbyWords = new Set(titleWords.slice(windowStart, windowEnd));
+      const artistNearby = artistWords.some((w) => nearbyWords.has(w));
+      if (!artistNearby) {
+        return {
+          pass: false,
+          reason: "artist far from song name in title",
+          isMusicCategory,
+        };
+      }
     }
   } else {
     // No artist given — cover-signal keyword is the only signal available
