@@ -137,28 +137,33 @@ export function filterResult(
   const artistWords = artistName ? wordsOf(artistName) : [];
 
   if (artistWords.length > 0) {
-    // An artist was specified — require some evidence it's actually them,
-    // regardless of cover-signal keywords. Otherwise a "live"/"cover" tag
-    // on a different artist's same-titled song passes for free (real bug:
-    // multiple unrelated songs share generic titles often enough that
-    // this isn't an edge case).
-    if (!containsAllWords(candidate.title, artistWords)) {
+    // Artist must appear as a contiguous phrase, not just each word
+    // present anywhere in the title — bag-of-words with .includes()
+    // collapses repeated words (e.g. "The The" -> ["the","the"]) down to
+    // "does the title contain 'the' even once", which for a common word
+    // is satisfied by nearly any English sentence. Confirmed on "Infected"
+    // by The The: "The Last of Us: Every Infected Explained!" passed the
+    // old check purely because it contains "the" once, nowhere near an
+    // actual "The The" mention. Phrase matching also naturally requires
+    // the two occurrences to be adjacent, which the old proximity check
+    // (word-in-window) didn't enforce.
+    const titleWords = wordsOf(candidate.title);
+    const artistStart = phraseIndex(titleWords, artistWords);
+
+    if (artistStart === null) {
       return { pass: false, reason: "artist not in title", isMusicCategory };
     }
 
-    // Both song and artist words are somewhere in the title, but could be
-    // coincidental — e.g. a product listing that happens to mention
-    // "fluorescent light" and, in an unrelated clause much later, "stars".
-    // If the song name forms a clean phrase in the title, require the
-    // artist to appear reasonably close to it, not just anywhere.
-    const titleWords = wordsOf(candidate.title);
+    // Song and artist both appear as clean phrases, but could still be
+    // coincidental — e.g. a product listing mentioning "fluorescent
+    // light" and, in an unrelated clause much later, "stars". If the
+    // song forms a clean phrase too, require the artist phrase to start
+    // reasonably close to it.
     const songStart = phraseIndex(titleWords, songWords);
     if (songStart !== null) {
       const windowStart = Math.max(0, songStart - PROXIMITY_SLACK_WORDS);
       const windowEnd = songStart + songWords.length + PROXIMITY_SLACK_WORDS;
-      const nearbyWords = new Set(titleWords.slice(windowStart, windowEnd));
-      const artistNearby = artistWords.some((w) => nearbyWords.has(w));
-      if (!artistNearby) {
+      if (artistStart < windowStart || artistStart >= windowEnd) {
         return {
           pass: false,
           reason: "artist far from song name in title",
