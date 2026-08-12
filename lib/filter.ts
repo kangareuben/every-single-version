@@ -30,6 +30,15 @@ const JUNK_KEYWORDS = [
 // tuned against real results rather than derived up front.
 const LYRIC_VIDEO_PATTERN = /\blyrics?\b/i;
 
+// Real performance/cover titles are almost always "[Artist] - [Song]"
+// format. A title that opens with a narrative/explainer construction is
+// reliably a documentary, "story behind the song", or making-of video —
+// confirmed twice now (a Nirvana history video, an "Eric Clapton made
+// this song" explainer), both of which otherwise passed every other
+// check since they genuinely mention the real song and artist.
+const NARRATIVE_TITLE_PATTERN =
+  /^(how|why)\b|^the (story|history|truth|making)\b/i;
+
 const MIN_DURATION_SECONDS = 30;
 const MAX_DURATION_SECONDS = 20 * 60;
 
@@ -96,6 +105,10 @@ export function filterResult(
 
   if (LYRIC_VIDEO_PATTERN.test(candidate.title)) {
     return { pass: false, reason: "lyric video", isMusicCategory };
+  }
+
+  if (NARRATIVE_TITLE_PATTERN.test(candidate.title.trim())) {
+    return { pass: false, reason: "narrative/explainer title", isMusicCategory };
   }
 
   if (containsAnyKeyword(text, JUNK_KEYWORDS)) {
