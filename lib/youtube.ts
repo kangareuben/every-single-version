@@ -67,27 +67,33 @@ export interface YoutubeVideoDetails {
   categoryId: string | null;
 }
 
+const VIDEOS_LIST_BATCH_SIZE = 50; // API cap on `id` params per call
+
 export async function getVideoDetails(
   videoIds: string[],
 ): Promise<Map<string, YoutubeVideoDetails>> {
   const result = new Map<string, YoutubeVideoDetails>();
   if (videoIds.length === 0) return result;
 
-  const url = new URL(`${BASE}/videos`);
-  url.searchParams.set("part", "contentDetails,snippet");
-  url.searchParams.set("id", videoIds.join(","));
-  url.searchParams.set("key", process.env.YOUTUBE_API_KEY!);
+  for (let i = 0; i < videoIds.length; i += VIDEOS_LIST_BATCH_SIZE) {
+    const batch = videoIds.slice(i, i + VIDEOS_LIST_BATCH_SIZE);
 
-  const res = await fetch(url.toString());
-  if (!res.ok) {
-    throw new Error(`YouTube videos.list failed: ${res.status} ${await res.text()}`);
-  }
-  const data = await res.json();
-  for (const item of data.items ?? []) {
-    result.set(item.id, {
-      durationSeconds: parseIso8601Duration(item.contentDetails.duration),
-      categoryId: item.snippet.categoryId ?? null,
-    });
+    const url = new URL(`${BASE}/videos`);
+    url.searchParams.set("part", "contentDetails,snippet");
+    url.searchParams.set("id", batch.join(","));
+    url.searchParams.set("key", process.env.YOUTUBE_API_KEY!);
+
+    const res = await fetch(url.toString());
+    if (!res.ok) {
+      throw new Error(`YouTube videos.list failed: ${res.status} ${await res.text()}`);
+    }
+    const data = await res.json();
+    for (const item of data.items ?? []) {
+      result.set(item.id, {
+        durationSeconds: parseIso8601Duration(item.contentDetails.duration),
+        categoryId: item.snippet.categoryId ?? null,
+      });
+    }
   }
   return result;
 }

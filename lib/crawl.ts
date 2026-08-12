@@ -5,7 +5,13 @@ import { parseArtistFromTitle } from "./artist-parse";
 import { linkArtistToSong } from "./artists";
 
 const LOCK_STALE_MINUTES = 10;
-const MAX_RESULTS = 25;
+const RESULTS_PER_QUERY = 50; // API max per call; same 100-unit cost regardless
+
+// One query alone (bare "song artist") strongly over-favors official/popular
+// uploads in YouTube's ranking, burying genuine covers past the first page.
+// Running these variants and merging results surfaces a much wider pool
+// before filtering. Costs ~6x the search.list quota of a single query.
+const QUERY_KEYWORD_VARIANTS = ["cover", "live", "acoustic", "instrumental", "karaoke"];
 
 // Guards against two concurrent crawls of the same song (e.g. two users
 // searching the same brand-new song at once). A crawl that crashed
@@ -53,8 +59,28 @@ export async function crawlSong(
 
   let succeeded = false;
   try {
-    const query = artistHint ? `${canonicalName} ${artistHint}` : canonicalName;
-    const results = await searchVideos(query, MAX_RESULTS);
+    const baseQuery = artistHint
+      ? `${canonicalName} ${artistHint}`
+      : canonicalName;
+    const queries = [
+      baseQuery,
+      ...QUERY_KEYWORD_VARIANTS.map((keyword) => `${baseQuery} ${keyword}`),
+    ];
+
+    const resultBatches = await Promise.all(
+      queries.map((query) => searchVideos(query, RESULTS_PER_QUERY)),
+    );
+
+    const uniqueResults = new Map<string, (typeof resultBatches)[number][number]>();
+    for (const batch of resultBatches) {
+      for (const result of batch) {
+        if (!uniqueResults.has(result.videoId)) {
+          uniqueResults.set(result.videoId, result);
+        }
+      }
+    }
+
+    const results = [...uniqueResults.values()];
     const details = await getVideoDetails(results.map((r) => r.videoId));
 
     for (const result of results) {
