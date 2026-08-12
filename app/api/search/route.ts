@@ -1,48 +1,10 @@
+import { after } from "next/server";
 import { supabaseAnon, supabaseService } from "@/lib/supabase";
+import { normalize } from "@/lib/normalize";
+import { linkArtistToSong } from "@/lib/artists";
+import { crawlSong } from "@/lib/crawl";
 
 const STALE_HOURS = 24;
-
-function normalize(raw: string): string {
-  return raw
-    .replace(/\((official|lyric|lyrics|audio|music)[^)]*\)/gi, "")
-    .replace(/\[(official|lyric|lyrics|audio|music)[^\]]*\]/gi, "")
-    .replace(/\bfeat\.?\b/gi, "")
-    .replace(/\bft\.?\b/gi, "")
-    .replace(/[^\p{L}\p{N}\s']/gu, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-async function linkArtistToSong(songId: string, artistName: string) {
-  const { data: existing, error: lookupError } = await supabaseService
-    .from("artists")
-    .select("id")
-    .ilike("name", artistName)
-    .maybeSingle();
-  if (lookupError) console.error("linkArtistToSong lookup:", lookupError);
-
-  let artistId = existing?.id as string | undefined;
-
-  if (!artistId) {
-    const { data: inserted, error: insertError } = await supabaseService
-      .from("artists")
-      .insert({ name: artistName })
-      .select("id")
-      .single();
-    if (insertError) console.error("linkArtistToSong insert:", insertError);
-    artistId = inserted?.id;
-  }
-
-  if (!artistId) return;
-
-  const { error: upsertError } = await supabaseService
-    .from("song_artists")
-    .upsert(
-      { song_id: songId, artist_id: artistId },
-      { onConflict: "song_id,artist_id" },
-    );
-  if (upsertError) console.error("linkArtistToSong upsert:", upsertError);
-}
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -65,19 +27,52 @@ export async function GET(request: Request) {
     return Response.json({ error: matchError.message }, { status: 500 });
   }
 
+  let songId: string;
+  let canonicalName: string;
+  let isNewSong = false;
+
   const candidate = candidates?.[0];
 
-  if (!candidate) {
-    return Response.json({
-      status: "new_song",
-      message: "Song not indexed yet. Crawling isn't wired up yet.",
-    });
+  if (candidate) {
+    songId = candidate.id;
+    canonicalName = candidate.canonical_name;
+  } else {
+    isNewSong = true;
+    const { data: newSong, error: insertSongError } = await supabaseService
+      .from("songs")
+      .insert({ canonical_name: songQuery.trim() })
+      .select("id, canonical_name")
+      .single();
+
+    if (insertSongError || !newSong) {
+      return Response.json(
+        { error: insertSongError?.message ?? "failed to create song" },
+        { status: 500 },
+      );
+    }
+
+    songId = newSong.id;
+    canonicalName = newSong.canonical_name;
+
+    try {
+      await crawlSong(songId, canonicalName, artistQuery);
+    } catch (err) {
+      console.error("crawl failed:", err);
+      return Response.json(
+        {
+          status: "crawl_failed",
+          songId,
+          message: "Something went wrong building this playlist. Try again shortly.",
+        },
+        { status: 502 },
+      );
+    }
   }
 
   const { data: linkedArtists } = await supabaseAnon
     .from("song_artists")
     .select("artists(name)")
-    .eq("song_id", candidate.id);
+    .eq("song_id", songId);
 
   const artistNames = (linkedArtists ?? [])
     .map((row) => (row.artists as unknown as { name: string } | null)?.name)
@@ -96,7 +91,7 @@ export async function GET(request: Request) {
   const { data: videos, error: videosError } = await supabaseAnon
     .from("videos")
     .select("id, video_id, title, channel_title")
-    .eq("song_id", candidate.id)
+    .eq("song_id", songId)
     .eq("hidden", false);
 
   if (videosError) {
@@ -115,28 +110,40 @@ export async function GET(request: Request) {
   }
 
   // Per plan: link the searched artist to this song whenever confirmed via
-  // channel-title fallback, so future searches for that artist hit directly.
+  // channel-title fallback, so future searches for them hit directly.
   if (matchedVia === "channel" && artistQuery) {
-    await linkArtistToSong(candidate.id, artistQuery.trim());
+    await linkArtistToSong(songId, artistQuery.trim());
   }
 
-  const { data: songRow } = await supabaseAnon
-    .from("songs")
-    .select("last_crawled_at")
-    .eq("id", candidate.id)
-    .single();
+  let stale = false;
+  if (!isNewSong) {
+    const { data: songRow } = await supabaseAnon
+      .from("songs")
+      .select("last_crawled_at")
+      .eq("id", songId)
+      .single();
 
-  const stale = songRow?.last_crawled_at
-    ? Date.now() - new Date(songRow.last_crawled_at).getTime() >
-      STALE_HOURS * 60 * 60 * 1000
-    : true;
+    stale = songRow?.last_crawled_at
+      ? Date.now() - new Date(songRow.last_crawled_at).getTime() >
+        STALE_HOURS * 60 * 60 * 1000
+      : true;
+
+    if (stale) {
+      // Serve the cached playlist immediately, re-crawl in the background.
+      after(() =>
+        crawlSong(songId, canonicalName, artistQuery).catch((err) =>
+          console.error("background re-crawl failed:", err),
+        ),
+      );
+    }
+  }
 
   return Response.json({
-    status: "cache_hit",
-    songId: candidate.id,
-    canonicalName: candidate.canonical_name,
+    status: isNewSong ? "new_song_crawled" : "cache_hit",
+    songId,
+    canonicalName,
     artistConfirmed,
-    stale, // TODO: trigger background re-crawl once the crawl job exists
+    stale,
     videos,
   });
 }
