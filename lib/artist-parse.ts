@@ -63,29 +63,44 @@ function cleanCandidate(raw: string): string | null {
   return isPlausibleName(cleaned) ? cleaned : null;
 }
 
+// Splits on any dash/pipe separator at once (not one type at a time), so
+// titles mixing them ("Radiohead - Creep | PIANO") split into all their
+// real segments instead of being skipped because no single separator
+// type alone produces exactly two parts.
+const SEGMENT_SEPARATOR = / - | – | — | \| /;
+
 export function parseArtistFromTitle(
   rawTitle: string,
   songName: string,
 ): string | null {
-  const dashSeparators = [" - ", " – ", " — ", " | "];
+  const songWords = wordsOf(songName);
+  // Strip parenthetical/bracket groups before segmenting, not just when
+  // cleaning the final candidate — a separator inside one ("Creep (Female
+  // Key - Piano)") would otherwise split it open, orphaning the closing
+  // bracket onto a different segment than its opener.
+  const segments = stripParentheticals(rawTitle)
+    .split(SEGMENT_SEPARATOR)
+    .map((s) => s.trim())
+    .filter(Boolean);
 
-  for (const sep of dashSeparators) {
-    if (!rawTitle.includes(sep)) continue;
-    const parts = rawTitle.split(sep).map((p) => p.trim());
-    if (parts.length !== 2) continue;
+  if (segments.length >= 2) {
+    const songIndex = segments.findIndex(
+      (seg) => wordOverlapRatio(seg, songWords) >= 0.6,
+    );
 
-    const songWords = wordsOf(songName);
-    const [first, second] = parts;
-    const firstIsSong = wordOverlapRatio(first, songWords) >= 0.6;
-    const secondIsSong = wordOverlapRatio(second, songWords) >= 0.6;
+    if (songIndex !== -1) {
+      // The artist is almost always the segment immediately adjacent to
+      // the song segment — trailing segments further out are usually
+      // secondary tags ("PIANO", "HD", a channel handle), not the artist.
+      // Prefer the segment before, then the segment after.
+      const candidateIndexes = [songIndex - 1, songIndex + 1].filter(
+        (i) => i >= 0 && i < segments.length,
+      );
 
-    if (firstIsSong && !secondIsSong) {
-      const candidate = cleanCandidate(second);
-      if (candidate) return candidate;
-    }
-    if (secondIsSong && !firstIsSong) {
-      const candidate = cleanCandidate(first);
-      if (candidate) return candidate;
+      for (const i of candidateIndexes) {
+        const candidate = cleanCandidate(segments[i]);
+        if (candidate) return candidate;
+      }
     }
   }
 
