@@ -179,5 +179,19 @@ export function filterResult(
     }
   }
 
+  // Song and artist can both appear as a clean adjacent phrase by sheer
+  // coincidence when they're common words — confirmed on "Cut" by Plumb
+  // matching a carpentry video's "5/12 plumb cut" (a framing term).
+  // YouTube's own category is a strong tiebreaker here: when it confidently
+  // says this isn't music, require a cover-signal keyword as corroboration,
+  // same as the no-artist-given case above.
+  if (
+    candidate.categoryId !== null &&
+    !isMusicCategory &&
+    !containsAnyKeyword(text, COVER_SIGNAL_KEYWORDS)
+  ) {
+    return { pass: false, reason: "non-music category, no cover signal", isMusicCategory };
+  }
+
   return { pass: true, isMusicCategory };
 }
