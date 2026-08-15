@@ -87,6 +87,16 @@ export async function GET(request: Request) {
     songId = newSong.id;
     canonicalName = newSong.canonical_name;
 
+    if (artistQuery) {
+      const artistId = await linkArtistToSong(songId, artistQuery.trim());
+      if (artistId) {
+        await supabaseService
+          .from("songs")
+          .update({ primary_artist_id: artistId })
+          .eq("id", songId);
+      }
+    }
+
     try {
       await crawlSong(songId, canonicalName, artistQuery, prefetchedBaseResults);
     } catch (err) {
@@ -144,8 +154,17 @@ export async function GET(request: Request) {
 
   // Per plan: link the searched artist to this song whenever confirmed via
   // channel-title fallback, so future searches for them hit directly.
+  // Also opportunistically backfills primary_artist_id for songs crawled
+  // before that column existed, or created without an artist hint.
   if (matchedVia === "channel" && artistQuery) {
-    await linkArtistToSong(songId, artistQuery.trim());
+    const artistId = await linkArtistToSong(songId, artistQuery.trim());
+    if (artistId) {
+      await supabaseService
+        .from("songs")
+        .update({ primary_artist_id: artistId })
+        .eq("id", songId)
+        .is("primary_artist_id", null);
+    }
   }
 
   let stale = false;

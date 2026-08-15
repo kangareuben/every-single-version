@@ -6,6 +6,7 @@ import Link from "next/link";
 interface SongEntry {
   id: string;
   canonicalName: string;
+  primaryArtist: string | null;
   artistNames: string[];
   videoCount: number;
   createdAt: string;
@@ -17,6 +18,18 @@ type BrowseState =
   | { phase: "results"; songs: SongEntry[] };
 
 const DEBOUNCE_MS = 300;
+
+// Display only — never used for search/navigation params, since the
+// fuzzy song-name match in /api/search compares against the raw stored
+// canonical_name and a re-cased variant risks creating a near-duplicate
+// song row. Most stored names come straight from what a user typed into
+// the search box, so plenty are all-lowercase; leave anything that
+// already has a capital letter alone (band names like "AC/DC" or "MGMT"
+// would get mangled by naive title-casing).
+function displayCase(text: string): string {
+  if (/[A-Z]/.test(text)) return text;
+  return text.replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 // Safety net, not a fix: repeating the exact same /api/browse URL a few
 // times in one session (e.g. typing a filter, then clearing it back to
@@ -105,8 +118,12 @@ export default function Browse() {
         {state.phase === "results" && state.songs.length > 0 && (
           <ul className="flex w-full flex-col gap-2">
             {state.songs.map((song) => {
+              // Raw (uncased) values only — see displayCase's note above.
+              const artistForSearch = song.primaryArtist ?? song.artistNames[0];
               const params = new URLSearchParams({ song: song.canonicalName });
-              if (song.artistNames[0]) params.set("artist", song.artistNames[0]);
+              if (artistForSearch) params.set("artist", artistForSearch);
+
+              const displayArtist = artistForSearch ? displayCase(artistForSearch) : null;
 
               return (
                 <li key={song.id}>
@@ -116,11 +133,11 @@ export default function Browse() {
                   >
                     <span className="flex flex-col">
                       <span className="font-medium text-black dark:text-zinc-50">
-                        {song.canonicalName}
+                        {displayCase(song.canonicalName)}
                       </span>
-                      {song.artistNames.length > 0 && (
+                      {displayArtist && (
                         <span className="text-xs text-zinc-500 dark:text-zinc-500">
-                          {song.artistNames.join(", ")}
+                          {displayArtist}
                         </span>
                       )}
                     </span>

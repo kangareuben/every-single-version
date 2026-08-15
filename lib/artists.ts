@@ -4,9 +4,12 @@ import { supabaseService } from "./supabase";
 // if needed. Used both when the search endpoint confirms an artist via
 // channel-title fallback, and when the crawl job parses an artist name
 // out of a video title.
-export async function linkArtistToSong(songId: string, artistName: string) {
+export async function linkArtistToSong(
+  songId: string,
+  artistName: string,
+): Promise<string | undefined> {
   const trimmed = artistName.trim();
-  if (!trimmed) return;
+  if (!trimmed) return undefined;
 
   const { data: existing, error: lookupError } = await supabaseService
     .from("artists")
@@ -27,7 +30,7 @@ export async function linkArtistToSong(songId: string, artistName: string) {
     artistId = inserted?.id;
   }
 
-  if (!artistId) return;
+  if (!artistId) return undefined;
 
   const { error: upsertError } = await supabaseService
     .from("song_artists")
@@ -36,4 +39,6 @@ export async function linkArtistToSong(songId: string, artistName: string) {
       { onConflict: "song_id,artist_id" },
     );
   if (upsertError) console.error("linkArtistToSong upsert:", upsertError);
+
+  return artistId;
 }
