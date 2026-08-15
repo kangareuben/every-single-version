@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 interface Video {
   id: string;
@@ -137,7 +138,19 @@ function VideoCard({ video }: { video: Video }) {
   );
 }
 
-export default function Home() {
+// Safety net against a fetch that never settles: repeating the exact
+// same request URL a few times in one browser session (e.g. via
+// /browse's filter) has been observed to wedge the browser's keep-alive
+// connection to this server, so a later, unrelated fetch() on it hangs
+// forever with no response and no error — reproduced in both dev and a
+// production build. Bounding requests client-side keeps the UI from
+// hanging forever if it recurs; see the same note in app/browse/page.tsx.
+const REQUEST_TIMEOUT_MS = 20000;
+
+function HomeInner() {
+  const searchParams = useSearchParams();
+  const songParam = searchParams.get("song");
+  const artistParam = searchParams.get("artist");
   const [songInput, setSongInput] = useState("");
   const [artistInput, setArtistInput] = useState("");
   const [state, setState] = useState<SearchState>({ phase: "idle" });
@@ -149,7 +162,9 @@ export default function Home() {
     if (artist) params.set("artist", artist);
 
     try {
-      const res = await fetch(`/api/search?${params.toString()}`);
+      const res = await fetch(`/api/search?${params.toString()}`, {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
       const data: SearchResponse = await res.json();
 
       if (data.status === "possible_swap" && data.suggestedSong && data.suggestedArtist) {
@@ -175,8 +190,12 @@ export default function Home() {
         canonicalName: data.canonicalName ?? song,
         videos: data.videos ?? [],
       });
-    } catch {
-      setState({ phase: "error", message: "Couldn't reach the server. Try again." });
+    } catch (err) {
+      const message =
+        (err as Error).name === "TimeoutError"
+          ? "That took too long. Try again."
+          : "Couldn't reach the server. Try again.";
+      setState({ phase: "error", message });
     }
   }
 
@@ -191,6 +210,23 @@ export default function Home() {
     setArtistInput(artist);
     await runSearch(song, artist);
   }
+
+  // Arriving from /browse with ?song=&artist= — depends on the parsed
+  // param values (not searchParams itself, and not "run once on mount"):
+  // a Link click from /browse to / with a *different* song reuses this
+  // same component instance rather than remounting it, so a mount-only
+  // effect would only ever fire for the first song ever navigated to.
+  // Deferred via queueMicrotask so runSearch's setState isn't called
+  // synchronously from the effect body itself.
+  useEffect(() => {
+    if (!songParam) return;
+    const artist = artistParam ?? "";
+    queueMicrotask(() => {
+      setSongInput(songParam);
+      setArtistInput(artist);
+      runSearch(songParam, artist);
+    });
+  }, [songParam, artistParam]);
 
   return (
     <div className="flex flex-1 flex-col items-center bg-zinc-50 font-sans dark:bg-black">
@@ -282,6 +318,9 @@ export default function Home() {
         )}
 
         <div className="flex gap-4 text-sm text-zinc-500 dark:text-zinc-500">
+          <Link href="/browse" className="underline">
+            Browse
+          </Link>
           <Link href="/privacy" className="underline">
             Privacy Policy
           </Link>
@@ -291,5 +330,13 @@ export default function Home() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={null}>
+      <HomeInner />
+    </Suspense>
   );
 }
