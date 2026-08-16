@@ -1,5 +1,7 @@
 export function normalize(raw: string): string {
   return raw
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // strip accents: "Beyoncé" -> "Beyonce"
     .replace(/\((official|lyric|lyrics|audio|music)[^)]*\)/gi, "")
     .replace(/\[(official|lyric|lyrics|audio|music)[^\]]*\]/gi, "")
     .replace(/\bfeat\.?\b/gi, "")
