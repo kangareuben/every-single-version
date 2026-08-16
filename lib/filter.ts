@@ -69,9 +69,16 @@ function containsAnyKeyword(haystack: string, keywords: string[]): boolean {
 
 // Index in `words` where `phrase` first occurs as a contiguous run, or
 // null if it doesn't appear as a clean phrase (only scattered, or absent).
-function phraseIndex(words: string[], phrase: string[]): number | null {
+// `excludeStart`, when given, skips a match starting at that exact index
+// so a second, independent occurrence can be searched for.
+function phraseIndex(
+  words: string[],
+  phrase: string[],
+  excludeStart?: number,
+): number | null {
   if (phrase.length === 0) return null;
   outer: for (let i = 0; i <= words.length - phrase.length; i++) {
+    if (i === excludeStart) continue;
     for (let j = 0; j < phrase.length; j++) {
       if (words[i + j] !== phrase[j]) continue outer;
     }
@@ -161,14 +168,32 @@ export function filterResult(
     // reasonably close to it.
     const songStart = phraseIndex(titleWords, songWords);
     if (songStart !== null) {
-      const windowStart = Math.max(0, songStart - PROXIMITY_SLACK_WORDS);
-      const windowEnd = songStart + songWords.length + PROXIMITY_SLACK_WORDS;
-      if (artistStart < windowStart || artistStart >= windowEnd) {
-        return {
-          pass: false,
-          reason: "artist far from song name in title",
-          isMusicCategory,
-        };
+      if (songStart === artistStart) {
+        // Song name equals (or overlaps) the artist name, so this one
+        // occurrence is doing double duty — it's really just the artist
+        // prefix in an "Artist - Song" title, not confirmation that this
+        // is actually the song being searched for. Confirmed on "Bad
+        // Company" by Bad Company: "Bad Company - If You Needed Somebody"
+        // passed purely because "Bad Company" satisfied both checks at
+        // once. Require the song phrase to also appear independently.
+        const independentSongStart = phraseIndex(titleWords, songWords, artistStart);
+        if (independentSongStart === null) {
+          return {
+            pass: false,
+            reason: "song name only present as artist name",
+            isMusicCategory,
+          };
+        }
+      } else {
+        const windowStart = Math.max(0, songStart - PROXIMITY_SLACK_WORDS);
+        const windowEnd = songStart + songWords.length + PROXIMITY_SLACK_WORDS;
+        if (artistStart < windowStart || artistStart >= windowEnd) {
+          return {
+            pass: false,
+            reason: "artist far from song name in title",
+            isMusicCategory,
+          };
+        }
       }
     }
   } else {
