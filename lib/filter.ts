@@ -69,16 +69,30 @@ function containsAnyKeyword(haystack: string, keywords: string[]): boolean {
 
 // Index in `words` where `phrase` first occurs as a contiguous run, or
 // null if it doesn't appear as a clean phrase (only scattered, or absent).
-// `excludeStart`, when given, skips a match starting at that exact index
-// so a second, independent occurrence can be searched for.
-function phraseIndex(
+function phraseIndex(words: string[], phrase: string[]): number | null {
+  if (phrase.length === 0) return null;
+  outer: for (let i = 0; i <= words.length - phrase.length; i++) {
+    for (let j = 0; j < phrase.length; j++) {
+      if (words[i + j] !== phrase[j]) continue outer;
+    }
+    return i;
+  }
+  return null;
+}
+
+// Same as phraseIndex, but skips any match whose span overlaps
+// [excludeStart, excludeEnd) — used to find a second, independent
+// occurrence that isn't just part of an already-matched phrase.
+function phraseIndexOutsideRange(
   words: string[],
   phrase: string[],
-  excludeStart?: number,
+  excludeStart: number,
+  excludeEnd: number,
 ): number | null {
   if (phrase.length === 0) return null;
   outer: for (let i = 0; i <= words.length - phrase.length; i++) {
-    if (i === excludeStart) continue;
+    const end = i + phrase.length;
+    if (i < excludeEnd && end > excludeStart) continue;
     for (let j = 0; j < phrase.length; j++) {
       if (words[i + j] !== phrase[j]) continue outer;
     }
@@ -168,19 +182,32 @@ export function filterResult(
     // reasonably close to it.
     const songStart = phraseIndex(titleWords, songWords);
     if (songStart !== null) {
-      if (songStart === artistStart) {
-        // Song name equals (or overlaps) the artist name, so this one
-        // occurrence is doing double duty — it's really just the artist
-        // prefix in an "Artist - Song" title, not confirmation that this
-        // is actually the song being searched for. Confirmed on "Bad
-        // Company" by Bad Company: "Bad Company - If You Needed Somebody"
-        // passed purely because "Bad Company" satisfied both checks at
-        // once. Require the song phrase to also appear independently.
-        const independentSongStart = phraseIndex(titleWords, songWords, artistStart);
-        if (independentSongStart === null) {
+      const songEnd = songStart + songWords.length;
+      const artistEnd = artistStart + artistWords.length;
+      const artistContainedInSong = artistStart >= songStart && artistEnd <= songEnd;
+
+      if (artistContainedInSong) {
+        // The matched artist phrase falls entirely inside the matched
+        // song phrase's own span — either they're the same name (e.g.
+        // "Bad Company" by Bad Company, where the one occurrence is just
+        // the artist prefix in an "Artist - Song" title), or the artist
+        // name is literally a substring of the song name (e.g. "Queen"
+        // inside "Killer Queen"). Confirmed on both: "Bad Company - If
+        // You Needed Somebody" and a DELTARUNE soundtrack video titled
+        // "Attack of the Killer Queen" that never actually mentions the
+        // band Queen. Neither confirms the artist independently of the
+        // song title, so require a second occurrence of the artist
+        // phrase outside the song phrase's span.
+        const independentArtistStart = phraseIndexOutsideRange(
+          titleWords,
+          artistWords,
+          songStart,
+          songEnd,
+        );
+        if (independentArtistStart === null) {
           return {
             pass: false,
-            reason: "song name only present as artist name",
+            reason: "artist name only present inside song name",
             isMusicCategory,
           };
         }
