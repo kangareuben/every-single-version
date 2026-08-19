@@ -25,6 +25,21 @@ export default function PrivacyPage() {
         not used to identify you.
       </p>
 
+      <h2 className="text-xl font-medium mt-4">Cookies and similar technologies</h2>
+      <p>
+        EverySingleVersion itself does not set cookies or use local/session
+        storage. However, when you play a video, it loads directly from
+        YouTube in an embedded player. YouTube (operated by Google LLC) may
+        place cookies, or access or recognize similar technologies already
+        on your device or browser, through that embedded player — for
+        example to support playback, measure engagement, and, depending on
+        your Google account and settings, personalize content or ads. This
+        happens on YouTube&apos;s and Google&apos;s systems, not ours: we do not
+        receive, store, or have access to any data collected this way. You
+        can control this through your own Google account and browser cookie
+        settings.
+      </p>
+
       <h2 className="text-xl font-medium mt-4">Third parties</h2>
       <p>
         Video playback is embedded directly from YouTube using the YouTube
