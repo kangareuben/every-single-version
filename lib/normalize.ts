@@ -22,3 +22,27 @@ export function wordOverlapRatio(text: string, words: string[]): number {
   const matches = words.filter((w) => textWords.has(w)).length;
   return matches / words.length;
 }
+
+// Common English function words carry no identifying content on their
+// own — nearly any sentence contains "the". A "song" or "artist" name
+// that's entirely stopwords (e.g. searching "The" by "The") can never be
+// meaningfully confirmed against arbitrary title text, no matter how the
+// matching logic is tuned.
+const STOPWORDS = new Set([
+  "a",
+  "an",
+  "the",
+  "and",
+  "or",
+  "of",
+  "to",
+  "in",
+  "on",
+  "at",
+  "is",
+  "it",
+]);
+
+export function hasSignificantWord(words: string[]): boolean {
+  return words.some((w) => !STOPWORDS.has(w));
+}

@@ -3,7 +3,7 @@ import { searchVideos, getVideoDetails, type YoutubeSearchResult } from "./youtu
 import { filterResult } from "./filter";
 import { parseArtistFromTitle } from "./artist-parse";
 import { linkArtistToSong } from "./artists";
-import { wordsOf, wordOverlapRatio } from "./normalize";
+import { wordsOf, wordOverlapRatio, hasSignificantWord } from "./normalize";
 
 const LOCK_STALE_MINUTES = 10;
 const RESULTS_PER_QUERY = 50; // API max per call; same 100-unit cost regardless
@@ -48,6 +48,16 @@ export function hasStrongMatch(
   artistHint: string | null,
 ): boolean {
   const songWords = wordsOf(songName);
+
+  if (!hasSignificantWord(songWords)) {
+    // A "song" name made entirely of stopwords (e.g. "The") can never be
+    // meaningfully confirmed — nearly any title contains "the". Confirmed
+    // on "The" by "The": matched dozens of The The's real discography,
+    // since the artist's own name (also all-stopword) trivially supplied
+    // a second, independent-looking occurrence of the same word.
+    return false;
+  }
+
   const artistWords = artistHint ? wordsOf(artistHint) : [];
 
   return results.some((result) => {
