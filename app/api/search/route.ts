@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import { supabaseAnon, supabaseService } from "@/lib/supabase";
-import { normalize } from "@/lib/normalize";
+import { normalize, wordsOf } from "@/lib/normalize";
 import { linkArtistToSong } from "@/lib/artists";
 import { crawlSong, fetchBaseQueryResults, hasStrongMatch } from "@/lib/crawl";
 import type { YoutubeSearchResult } from "@/lib/youtube";
@@ -37,7 +37,21 @@ export async function GET(request: Request) {
   let canonicalName: string;
   let isNewSong = false;
 
-  const candidate = candidates?.[0];
+  // pg_trgm similarity gives partial credit whenever one string's
+  // trigrams are a subset of another's, so a short search term can score
+  // above the match threshold against a longer title that merely
+  // contains it — "queen" comes back ~46% similar to the already-crawled
+  // "killer queen", serving that song's cached (wrong) playlist outright
+  // for a "Queen" by "Flash" search, without ever reaching the
+  // swap-detection or crawl logic below. A genuine typo/variant of a
+  // title has the same word count as the original; a search term that's
+  // actually a fragment of a longer title doesn't. Confirmed on "take"
+  // (from "take me home, country roads") also wrongly matching the
+  // unrelated "take on me".
+  const songWordCount = wordsOf(songQuery).length;
+  const candidate = candidates?.find(
+    (c: { canonical_name: string }) => wordsOf(c.canonical_name).length === songWordCount,
+  );
 
   if (candidate) {
     songId = candidate.id;
