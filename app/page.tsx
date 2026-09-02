@@ -201,7 +201,7 @@ function HomeInner() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!songInput.trim()) return;
+    if (!songInput.trim() || !artistInput.trim()) return;
     await runSearch(songInput.trim(), artistInput.trim());
   }
 
@@ -253,14 +253,14 @@ function HomeInner() {
           />
           <input
             type="text"
-            placeholder="Artist (optional)"
+            placeholder="Artist"
             value={artistInput}
             onChange={(e) => setArtistInput(e.target.value)}
             className="w-full rounded-full border border-black/[.08] px-5 py-3 text-black placeholder:text-zinc-400 dark:border-white/[.145] dark:text-zinc-50"
           />
           <button
             type="submit"
-            disabled={state.phase === "loading" || !songInput.trim()}
+            disabled={state.phase === "loading" || !songInput.trim() || !artistInput.trim()}
             className="rounded-full bg-foreground px-6 py-3 font-medium text-background disabled:opacity-50"
           >
             Search

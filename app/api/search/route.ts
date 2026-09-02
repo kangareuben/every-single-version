@@ -26,6 +26,15 @@ export async function GET(request: Request) {
     return Response.json({ error: "song is required" }, { status: 400 });
   }
 
+  // A bare song name is too ambiguous for common/short titles to
+  // disambiguate — confirmed on "One": Metallica's and U2's versions
+  // both passed the no-artist path's weak cover-signal-keyword check,
+  // since it has no phrase-proximity confirmation to fall back on the
+  // way the with-artist path does.
+  if (!artistQuery) {
+    return Response.json({ error: "artist is required" }, { status: 400 });
+  }
+
   const normalizedSong = normalize(songQuery);
   const normalizedArtist = artistQuery ? normalize(artistQuery) : null;
 
