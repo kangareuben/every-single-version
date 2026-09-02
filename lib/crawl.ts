@@ -69,6 +69,44 @@ export function hasStrongMatch(
   });
 }
 
+// Index in `words` where `phrase` first occurs as a contiguous run, or
+// null if it doesn't appear as a clean phrase.
+function phraseIndex(words: string[], phrase: string[]): number | null {
+  if (phrase.length === 0) return null;
+  outer: for (let i = 0; i <= words.length - phrase.length; i++) {
+    for (let j = 0; j < phrase.length; j++) {
+      if (words[i + j] !== phrase[j]) continue outer;
+    }
+    return i;
+  }
+  return null;
+}
+
+// Counts results whose title has `artistName`'s phrase starting before
+// `songName`'s phrase — the "[Artist] - [Song]" convention real
+// performance/cover titles almost always follow. hasStrongMatch's bag-of-
+// words check can't tell which of two searched terms is actually playing
+// which role when a title genuinely contains both (e.g. "Kamelot -
+// Forever" satisfies song=Kamelot/artist=Forever exactly as well as the
+// reverse), so it independently confirms whichever orientation the user
+// typed, silently skipping swap detection. This breaks that tie using
+// title order instead of word presence.
+export function countArtistBeforeSong(
+  results: YoutubeSearchResult[],
+  songName: string,
+  artistName: string,
+): number {
+  const songWords = wordsOf(songName);
+  const artistWords = wordsOf(artistName);
+
+  return results.filter((result) => {
+    const titleWords = wordsOf(result.title);
+    const songStart = phraseIndex(titleWords, songWords);
+    const artistStart = phraseIndex(titleWords, artistWords);
+    return songStart !== null && artistStart !== null && artistStart < songStart;
+  }).length;
+}
+
 // Guards against two concurrent crawls of the same song (e.g. two users
 // searching the same brand-new song at once). A crawl that crashed
 // without clearing its lock is treated as expired after

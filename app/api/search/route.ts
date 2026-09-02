@@ -2,7 +2,12 @@ import { after } from "next/server";
 import { supabaseAnon, supabaseService } from "@/lib/supabase";
 import { normalize, wordsOf } from "@/lib/normalize";
 import { linkArtistToSong } from "@/lib/artists";
-import { crawlSong, fetchBaseQueryResults, hasStrongMatch } from "@/lib/crawl";
+import {
+  countArtistBeforeSong,
+  crawlSong,
+  fetchBaseQueryResults,
+  hasStrongMatch,
+} from "@/lib/crawl";
 import type { YoutubeSearchResult } from "@/lib/youtube";
 
 const STALE_HOURS = 24;
@@ -68,10 +73,30 @@ export async function GET(request: Request) {
       const trimmedSong = songQuery.trim();
       const trimmedArtist = artistQuery.trim();
       const baseResults = await fetchBaseQueryResults(trimmedSong, trimmedArtist);
+      const directStrong = hasStrongMatch(baseResults, trimmedSong, trimmedArtist);
 
-      if (!hasStrongMatch(baseResults, trimmedSong, trimmedArtist)) {
+      if (!directStrong) {
         const swappedResults = await fetchBaseQueryResults(trimmedArtist, trimmedSong);
         if (hasStrongMatch(swappedResults, trimmedArtist, trimmedSong)) {
+          return Response.json({
+            status: "possible_swap",
+            suggestedSong: trimmedArtist,
+            suggestedArtist: trimmedSong,
+            message: `Did you mean "${trimmedArtist}" by "${trimmedSong}"?`,
+          });
+        }
+      } else if (hasStrongMatch(baseResults, trimmedArtist, trimmedSong)) {
+        // Bag-of-words matching can't tell which searched term is really
+        // the artist when a title genuinely contains both — e.g.
+        // "Kamelot - Forever" independently confirms song=Kamelot/
+        // artist=Forever just as well as the reverse, so the as-typed
+        // reading never even reaches the check above. Break the tie with
+        // title order ("[Artist] - [Song]"), reusing baseResults so this
+        // costs no extra search.list call in the common case where only
+        // one orientation is actually strong.
+        const directOrder = countArtistBeforeSong(baseResults, trimmedSong, trimmedArtist);
+        const swappedOrder = countArtistBeforeSong(baseResults, trimmedArtist, trimmedSong);
+        if (swappedOrder > directOrder) {
           return Response.json({
             status: "possible_swap",
             suggestedSong: trimmedArtist,
