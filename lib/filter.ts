@@ -103,6 +103,43 @@ function phraseIndexOutsideRange(
 
 const PROXIMITY_SLACK_WORDS = 6;
 
+// True when `songName` and `artistName` both appear as clean phrases in
+// `title`, but only because one is entirely nested inside the other with
+// no independent, non-overlapping occurrence elsewhere — meaning one of
+// them isn't really confirmed on its own, just borrowing the other's
+// words. Confirmed in both directions: "Killer Queen" by Queen matched a
+// DELTARUNE soundtrack video ("Attack of the Killer Queen") where "Queen"
+// only existed inside the song phrase; "Run" by Run DMC matched nearly
+// all of Run-DMC's real, unrelated discography ("RUN DMC - It's Tricky",
+// "RUN DMC - Walk This Way", ...) where "Run" only existed inside the
+// artist's own name.
+export function isContainmentArtifact(
+  title: string,
+  songName: string,
+  artistName: string,
+): boolean {
+  const titleWords = wordsOf(title);
+  const songWords = wordsOf(songName);
+  const artistWords = wordsOf(artistName);
+
+  const songStart = phraseIndex(titleWords, songWords);
+  const artistStart = phraseIndex(titleWords, artistWords);
+  if (songStart === null || artistStart === null) return false;
+
+  const songEnd = songStart + songWords.length;
+  const artistEnd = artistStart + artistWords.length;
+  const artistContainedInSong = artistStart >= songStart && artistEnd <= songEnd;
+  const songContainedInArtist = songStart >= artistStart && songEnd <= artistEnd;
+
+  if (artistContainedInSong) {
+    return phraseIndexOutsideRange(titleWords, artistWords, songStart, songEnd) === null;
+  }
+  if (songContainedInArtist) {
+    return phraseIndexOutsideRange(titleWords, songWords, artistStart, artistEnd) === null;
+  }
+  return false;
+}
+
 export interface FilterCandidate {
   title: string;
   description: string;
@@ -179,48 +216,27 @@ export function filterResult(
     // coincidental — e.g. a product listing mentioning "fluorescent
     // light" and, in an unrelated clause much later, "stars". If the
     // song forms a clean phrase too, require the artist phrase to start
-    // reasonably close to it.
+    // reasonably close to it — unless one phrase is just nested inside
+    // the other (see isContainmentArtifact), which proximity alone can't
+    // catch since a nested phrase is trivially "close" to its container.
     const songStart = phraseIndex(titleWords, songWords);
     if (songStart !== null) {
-      const songEnd = songStart + songWords.length;
-      const artistEnd = artistStart + artistWords.length;
-      const artistContainedInSong = artistStart >= songStart && artistEnd <= songEnd;
+      if (isContainmentArtifact(candidate.title, songName, artistName!)) {
+        return {
+          pass: false,
+          reason: "song/artist name only present inside the other",
+          isMusicCategory,
+        };
+      }
 
-      if (artistContainedInSong) {
-        // The matched artist phrase falls entirely inside the matched
-        // song phrase's own span — either they're the same name (e.g.
-        // "Bad Company" by Bad Company, where the one occurrence is just
-        // the artist prefix in an "Artist - Song" title), or the artist
-        // name is literally a substring of the song name (e.g. "Queen"
-        // inside "Killer Queen"). Confirmed on both: "Bad Company - If
-        // You Needed Somebody" and a DELTARUNE soundtrack video titled
-        // "Attack of the Killer Queen" that never actually mentions the
-        // band Queen. Neither confirms the artist independently of the
-        // song title, so require a second occurrence of the artist
-        // phrase outside the song phrase's span.
-        const independentArtistStart = phraseIndexOutsideRange(
-          titleWords,
-          artistWords,
-          songStart,
-          songEnd,
-        );
-        if (independentArtistStart === null) {
-          return {
-            pass: false,
-            reason: "artist name only present inside song name",
-            isMusicCategory,
-          };
-        }
-      } else {
-        const windowStart = Math.max(0, songStart - PROXIMITY_SLACK_WORDS);
-        const windowEnd = songStart + songWords.length + PROXIMITY_SLACK_WORDS;
-        if (artistStart < windowStart || artistStart >= windowEnd) {
-          return {
-            pass: false,
-            reason: "artist far from song name in title",
-            isMusicCategory,
-          };
-        }
+      const windowStart = Math.max(0, songStart - PROXIMITY_SLACK_WORDS);
+      const windowEnd = songStart + songWords.length + PROXIMITY_SLACK_WORDS;
+      if (artistStart < windowStart || artistStart >= windowEnd) {
+        return {
+          pass: false,
+          reason: "artist far from song name in title",
+          isMusicCategory,
+        };
       }
     }
   } else {

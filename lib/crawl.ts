@@ -1,6 +1,6 @@
 import { supabaseService } from "./supabase";
 import { searchVideos, getVideoDetails, type YoutubeSearchResult } from "./youtube";
-import { filterResult } from "./filter";
+import { filterResult, isContainmentArtifact } from "./filter";
 import { parseArtistFromTitle } from "./artist-parse";
 import { linkArtistToSong } from "./artists";
 import { wordsOf, wordOverlapRatio, hasSignificantWord } from "./normalize";
@@ -65,7 +65,18 @@ export function hasStrongMatch(
     const artistMatch =
       artistWords.length === 0 ||
       wordOverlapRatio(result.title, artistWords) >= STRONG_MATCH_THRESHOLD;
-    return songMatch && artistMatch;
+    if (!songMatch || !artistMatch) return false;
+
+    // Bag-of-words alone can't tell that a "match" is really just the
+    // song name being a substring of the artist name (or vice versa) —
+    // confirmed on "Run" by Run DMC: nearly all of Run-DMC's real,
+    // unrelated songs ("It's Tricky", "Walk This Way", ...) satisfied
+    // both checks purely because "Run" is literally part of "Run DMC",
+    // with no song called "Run" actually existing.
+    if (artistWords.length > 0 && isContainmentArtifact(result.title, songName, artistHint!)) {
+      return false;
+    }
+    return true;
   });
 }
 

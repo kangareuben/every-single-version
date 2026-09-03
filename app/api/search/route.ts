@@ -12,6 +12,11 @@ import type { YoutubeSearchResult } from "@/lib/youtube";
 
 const STALE_HOURS = 24;
 
+// Minimum videos required to trust the swap-tie-break's title-order
+// signal (see below) — one coincidental match shouldn't override the
+// as-typed reading.
+const MIN_ORDER_CONFIRMATIONS = 3;
+
 // Safety margin for larger crawls (more results = more DB writes). Hobby
 // plan may cap this lower regardless — worth checking the Vercel dashboard
 // if new-song searches ever time out in production.
@@ -103,9 +108,17 @@ export async function GET(request: Request) {
         // title order ("[Artist] - [Song]"), reusing baseResults so this
         // costs no extra search.list call in the common case where only
         // one orientation is actually strong.
+        // Require more than a bare majority of one — a single stray
+        // video can independently satisfy both readings by coincidence.
+        // Confirmed on "Run" by Run DMC (not a real song): one obscure
+        // upload titled "Run from Run DMC feat. Justine Simmons..." had
+        // both phrases as genuinely separate, non-overlapping matches,
+        // ordered artist-before-song, which alone flipped the tie-break
+        // to suggest "Run DMC" by "Run" — equally nonsensical. A genuine
+        // swap (Kamelot/Forever) had 36 supporting videos; this had 1.
         const directOrder = countArtistBeforeSong(baseResults, trimmedSong, trimmedArtist);
         const swappedOrder = countArtistBeforeSong(baseResults, trimmedArtist, trimmedSong);
-        if (swappedOrder > directOrder) {
+        if (swappedOrder > directOrder && swappedOrder >= MIN_ORDER_CONFIRMATIONS) {
           return Response.json({
             status: "possible_swap",
             suggestedSong: trimmedArtist,
