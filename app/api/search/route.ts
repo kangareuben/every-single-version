@@ -22,6 +22,37 @@ const MIN_ORDER_CONFIRMATIONS = 3;
 // if new-song searches ever time out in production.
 export const maxDuration = 60;
 
+// Same check used later to set artistConfirmed on the response, reused
+// here to decide whether a name-matching song is actually THIS artist's
+// song before reusing its cached playlist — see the call site.
+async function confirmArtistForSong(
+  songId: string,
+  normalizedArtist: string,
+): Promise<boolean> {
+  const { data: linkedArtists } = await supabaseAnon
+    .from("song_artists")
+    .select("artists(name)")
+    .eq("song_id", songId);
+
+  const artistNames = (linkedArtists ?? [])
+    .map((row) => (row.artists as unknown as { name: string } | null)?.name)
+    .filter((name): name is string => Boolean(name));
+
+  if (artistNames.some((name) => normalize(name) === normalizedArtist)) {
+    return true;
+  }
+
+  const { data: videos } = await supabaseAnon
+    .from("videos")
+    .select("channel_title")
+    .eq("song_id", songId)
+    .eq("hidden", false);
+
+  return (videos ?? []).some(
+    (v) => v.channel_title && normalize(v.channel_title).includes(normalizedArtist),
+  );
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const songQuery = url.searchParams.get("song");
@@ -41,7 +72,7 @@ export async function GET(request: Request) {
   }
 
   const normalizedSong = normalize(songQuery);
-  const normalizedArtist = artistQuery ? normalize(artistQuery) : null;
+  const normalizedArtist = normalize(artistQuery);
 
   const { data: candidates, error: matchError } = await supabaseAnon.rpc(
     "match_songs",
@@ -68,9 +99,26 @@ export async function GET(request: Request) {
   // (from "take me home, country roads") also wrongly matching the
   // unrelated "take on me".
   const songWordCount = wordsOf(songQuery).length;
-  const candidate = candidates?.find(
+  const nameMatches = (candidates ?? []).filter(
     (c: { canonical_name: string }) => wordsOf(c.canonical_name).length === songWordCount,
   );
+
+  // The same title can be a genuinely different song by a different
+  // artist — "Green Eyes" is a real song by Coldplay, Erykah Badu, and
+  // Rufus Wainwright, among others. match_songs only matches on name, so
+  // without this, whichever same-named song got crawled first would
+  // silently serve its cached (wrong-artist) playlist for every later
+  // search of that title, no matter which artist was actually typed.
+  // Only reuse a name match once the searched artist is confirmed
+  // against it; otherwise fall through and crawl a new entry for this
+  // artist under the same title.
+  let candidate: { id: string; canonical_name: string } | undefined;
+  for (const c of nameMatches) {
+    if (await confirmArtistForSong(c.id, normalizedArtist)) {
+      candidate = c;
+      break;
+    }
+  }
 
   if (candidate) {
     songId = candidate.id;
