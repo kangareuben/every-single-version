@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import { supabaseAnon, supabaseService } from "@/lib/supabase";
-import { normalize, wordsOf } from "@/lib/normalize";
+import { isCloseMatch, normalize, wordsOf } from "@/lib/normalize";
 import { linkArtistToSong } from "@/lib/artists";
 import {
   countArtistBeforeSong,
@@ -25,6 +25,10 @@ export const maxDuration = 60;
 // Same check used later to set artistConfirmed on the response, reused
 // here to decide whether a name-matching song is actually THIS artist's
 // song before reusing its cached playlist — see the call site.
+// isCloseMatch tolerates a small typo ("Coldplya" for "Coldplay") —
+// without it, a single mistyped letter failed to reuse the existing
+// song at all and silently spawned an empty duplicate under the typo'd
+// name instead.
 async function confirmArtistForSong(
   songId: string,
   normalizedArtist: string,
@@ -38,7 +42,7 @@ async function confirmArtistForSong(
     .map((row) => (row.artists as unknown as { name: string } | null)?.name)
     .filter((name): name is string => Boolean(name));
 
-  if (artistNames.some((name) => normalize(name) === normalizedArtist)) {
+  if (artistNames.some((name) => isCloseMatch(name, normalizedArtist))) {
     return true;
   }
 
@@ -234,9 +238,7 @@ export async function GET(request: Request) {
   let matchedVia: "artist" | "channel" | null = null;
 
   if (normalizedArtist) {
-    artistConfirmed = artistNames.some(
-      (name) => normalize(name) === normalizedArtist,
-    );
+    artistConfirmed = artistNames.some((name) => isCloseMatch(name, normalizedArtist));
     if (artistConfirmed) matchedVia = "artist";
   }
 
