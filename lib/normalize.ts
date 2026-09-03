@@ -1,3 +1,40 @@
+// One-word texting/song-title shorthand mapped to its full word — e.g.
+// "good 4 u" and "good 4 you" are the same song, but without this the
+// literal-minded matcher treats "u" and "you" as unrelated, so whichever
+// spelling got searched first "won" and the other kept resolving back to
+// it (confirmed on "good 4 u" by Olivia Rodrigo: the "good 4 you" typo
+// found almost nothing — real titles say "u" — but still cached as the
+// song, permanently blocking the correct spelling).
+//
+// Deliberately single-word-for-single-word only: something that expands
+// to multiple words (e.g. "gonna" -> "going to") would change word count
+// between spellings, which the match_songs word-count guard (see
+// app/api/search/route.ts) relies on staying stable between a title and
+// its variants. Bare digits ("2", "4") are excluded for a different
+// reason — those double as literal track/volume numbers far too often
+// ("Now That's What I Call Music 2") to safely treat as "to"/"for"
+// everywhere; digit-containing shorthand like "b4" or "gr8" doesn't have
+// that ambiguity, since nothing legitimately uses "b4" as a bare number.
+const SHORTHAND: Record<string, string> = {
+  u: "you",
+  ur: "your",
+  n: "and",
+  b4: "before",
+  gr8: "great",
+  l8: "late",
+  w8: "wait",
+  m8: "mate",
+  thru: "through",
+  luv: "love",
+  cuz: "because",
+  coz: "because",
+};
+
+const SHORTHAND_PATTERN = new RegExp(
+  `\\b(${Object.keys(SHORTHAND).join("|")})\\b`,
+  "gi",
+);
+
 export function normalize(raw: string): string {
   return raw
     .normalize("NFD")
@@ -7,6 +44,7 @@ export function normalize(raw: string): string {
     .replace(/\bfeat\.?\b/gi, "")
     .replace(/\bft\.?\b/gi, "")
     .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .replace(SHORTHAND_PATTERN, (match) => SHORTHAND[match.toLowerCase()])
     .replace(/\s+/g, " ")
     .trim();
 }
