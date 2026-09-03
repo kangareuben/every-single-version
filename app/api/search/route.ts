@@ -118,10 +118,27 @@ export async function GET(request: Request) {
   // artist under the same title.
   let candidate: { id: string; canonical_name: string } | undefined;
   for (const c of nameMatches) {
-    if (await confirmArtistForSong(c.id, normalizedArtist)) {
-      candidate = c;
-      break;
-    }
+    if (!(await confirmArtistForSong(c.id, normalizedArtist))) continue;
+
+    // A song with zero surviving videos is a previous search that found
+    // nothing — often because the title was misspelled (its artist link
+    // still gets created up front, before the crawl runs, regardless of
+    // whether the crawl found anything). Confirmed on "good for you" by
+    // "Olivia Rodrigo" (the real title is "good 4 u"): that failed
+    // search's empty entry, sharing a word count and a typo-tolerant
+    // artist match, kept getting reused for every later attempt at the
+    // correct spelling too, permanently serving zero results. Skip empty
+    // candidates so a later attempt — even a differently-misspelled one —
+    // gets a real crawl instead of the cached failure.
+    const { count } = await supabaseAnon
+      .from("videos")
+      .select("id", { count: "exact", head: true })
+      .eq("song_id", c.id)
+      .eq("hidden", false);
+    if (!count) continue;
+
+    candidate = c;
+    break;
   }
 
   if (candidate) {
