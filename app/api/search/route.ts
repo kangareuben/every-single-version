@@ -12,6 +12,29 @@ import type { YoutubeSearchResult } from "@/lib/youtube";
 
 const STALE_HOURS = 24;
 
+// True when `longer` is exactly `shorter` repeated two or more times —
+// e.g. ["money"] repeated 3x is ["money","money","money"]. Lets a
+// legitimate abbreviated search ("Money" for ABBA's "Money, Money,
+// Money") reuse the existing entry despite differing word counts,
+// without reopening the word-count guard's exact purpose: rejecting a
+// short search term that's merely a *fragment* of an unrelated longer
+// title ("queen" is not "killer queen" repeated, so this correctly
+// stays false there). Confirmed on "Money" by ABBA: matched 81 mostly
+// -overlapping-but-not-identical results in its own entry versus 84 in
+// "Money Money Money" — same real song, needlessly split in two.
+function isRepeatedPhraseOf(longer: string[], shorter: string[]): boolean {
+  if (shorter.length === 0) return false;
+  if (longer.length <= shorter.length) return false;
+  if (longer.length % shorter.length !== 0) return false;
+  const repeats = longer.length / shorter.length;
+  for (let i = 0; i < repeats; i++) {
+    for (let j = 0; j < shorter.length; j++) {
+      if (longer[i * shorter.length + j] !== shorter[j]) return false;
+    }
+  }
+  return true;
+}
+
 // Minimum videos required to trust the swap-tie-break's title-order
 // signal (see below) — one coincidental match shouldn't override the
 // as-typed reading.
@@ -102,10 +125,15 @@ export async function GET(request: Request) {
   // actually a fragment of a longer title doesn't. Confirmed on "take"
   // (from "take me home, country roads") also wrongly matching the
   // unrelated "take on me".
-  const songWordCount = wordsOf(songQuery).length;
-  const nameMatches = (candidates ?? []).filter(
-    (c: { canonical_name: string }) => wordsOf(c.canonical_name).length === songWordCount,
-  );
+  const songWords = wordsOf(songQuery);
+  const nameMatches = (candidates ?? []).filter((c: { canonical_name: string }) => {
+    const candidateWords = wordsOf(c.canonical_name);
+    return (
+      candidateWords.length === songWords.length ||
+      isRepeatedPhraseOf(candidateWords, songWords) ||
+      isRepeatedPhraseOf(songWords, candidateWords)
+    );
+  });
 
   // The same title can be a genuinely different song by a different
   // artist — "Green Eyes" is a real song by Coldplay, Erykah Badu, and
