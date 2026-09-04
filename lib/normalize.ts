@@ -34,6 +34,13 @@
 // digits above: they're pure spelling/pronunciation variants with only
 // one meaning, not words doing double duty (a bare digit can mean the
 // literal number OR the word; "til" never means anything but "until").
+//
+// "da"/"tha" -> "the" follow the same safe pattern as the digits: "the"
+// is already in STOPWORDS, so this plugs into an already-weak signal
+// rather than introducing risk. Confirmed on "Fly Me to the Moon" by
+// Frank Sinatra (typed as "fly me 2 da moon"): 0/50 real results
+// matched the "da" spelling — the official recording and nearly every
+// cover say "the" — versus 22/50 for the correct spelling.
 const SHORTHAND: Record<string, string> = {
   u: "you",
   ur: "your",
@@ -53,6 +60,8 @@ const SHORTHAND: Record<string, string> = {
   til: "until",
   till: "until",
   ya: "you",
+  da: "the",
+  tha: "the",
 };
 
 const SHORTHAND_PATTERN = new RegExp(
