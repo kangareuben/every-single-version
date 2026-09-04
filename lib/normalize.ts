@@ -10,15 +10,32 @@
 // to multiple words (e.g. "gonna" -> "going to") would change word count
 // between spellings, which the match_songs word-count guard (see
 // app/api/search/route.ts) relies on staying stable between a title and
-// its variants. Bare digits ("2", "4") are excluded for a different
-// reason — those double as literal track/volume numbers far too often
-// ("Now That's What I Call Music 2") to safely treat as "to"/"for"
-// everywhere; digit-containing shorthand like "b4" or "gr8" doesn't have
-// that ambiguity, since nothing legitimately uses "b4" as a bare number.
+// its variants.
+//
+// "2" and "4" map to "to" and "for" rather than being excluded like other
+// bare digits: both double as literal track/volume/sequel numbers
+// constantly ("Now That's What I Call Music 4", "Kill Bill Vol 2"), but
+// "to" and "for" are both in STOPWORDS below, so folding the digits into
+// them doesn't introduce a new risky token — it plugs into a signal
+// already treated as weak/content-free. Confirmed safe against real
+// counter-examples, not just this catalog: Spice Girls' "2 Become 1"
+// uses "2" as the literal word "two", and "4 Non Blondes" uses "4" as
+// literal "four" — but since no other real song or artist is titled "To
+// Become 1"/"Too Become One" or "For Non Blondes" to collide with,
+// canonicalizing them alongside "to"/"for" causes no false merge, just
+// reunifies spelling variants of the one real title (confirmed on
+// "Nothing Compares 2 U" by Sinéad O'Connor: the "Nothing Compares To
+// You" spelling matched only 5/50 real results — missing the official
+// video entirely — until "2" was recognized as equivalent; the same
+// stylization appears throughout Prince's catalog, e.g. "I Would Die 4
+// U"). "too" joins the "to"/"2" bucket for the same reason.
 const SHORTHAND: Record<string, string> = {
   u: "you",
   ur: "your",
   n: "and",
+  "2": "to",
+  too: "to",
+  "4": "for",
   b4: "before",
   gr8: "great",
   l8: "late",
@@ -74,6 +91,7 @@ const STOPWORDS = new Set([
   "or",
   "of",
   "to",
+  "for",
   "in",
   "on",
   "at",
