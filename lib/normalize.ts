@@ -29,6 +29,11 @@
 // video entirely — until "2" was recognized as equivalent; the same
 // stylization appears throughout Prince's catalog, e.g. "I Would Die 4
 // U"). "too" joins the "to"/"2" bucket for the same reason.
+//
+// "til"/"till" -> "until" and "ya" -> "you" carry less risk than the
+// digits above: they're pure spelling/pronunciation variants with only
+// one meaning, not words doing double duty (a bare digit can mean the
+// literal number OR the word; "til" never means anything but "until").
 const SHORTHAND: Record<string, string> = {
   u: "you",
   ur: "your",
@@ -45,6 +50,9 @@ const SHORTHAND: Record<string, string> = {
   luv: "love",
   cuz: "because",
   coz: "because",
+  til: "until",
+  till: "until",
+  ya: "you",
 };
 
 const SHORTHAND_PATTERN = new RegExp(
