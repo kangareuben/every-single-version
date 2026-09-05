@@ -1,4 +1,4 @@
-import { normalize, wordsOf } from "./normalize";
+import { wordsOf } from "./normalize";
 
 // Starting point per the plan, not final — tune against real search
 // results once the crawl job has run against a variety of songs.
@@ -57,9 +57,18 @@ export function parseIso8601Duration(duration: string): number | null {
   );
 }
 
+// Word-boundary membership, not substring — a raw `.includes()` check let
+// "under" match "underground" as a false hit, and worse, silently
+// disabled the proximity/containment checks below (which only run once
+// phraseIndex finds the song as a real token), so nothing constrained
+// how far the coincidentally-substring-matched "song" was from the
+// artist. Confirmed on "Under" by Falconer: "Falconer - Decadence of
+// Dignity - live Heidelberg 2004 - Underground Live TV recording" (a
+// different real Falconer song entirely) passed purely because "under"
+// is a substring of "Underground", the recording venue's name.
 function containsAllWords(haystack: string, needleWords: string[]): boolean {
-  const normalizedHaystack = normalize(haystack).toLowerCase();
-  return needleWords.every((word) => normalizedHaystack.includes(word));
+  const haystackWords = new Set(wordsOf(haystack));
+  return needleWords.every((word) => haystackWords.has(word));
 }
 
 function containsAnyKeyword(haystack: string, keywords: string[]): boolean {
