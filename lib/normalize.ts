@@ -84,10 +84,34 @@ const SHORTHAND_PATTERN = new RegExp(
 // both directions at once.
 const BRACKET_PATTERN = /[()[\]{}「」『』【】〈〉《》（）［］｛｝]/g;
 
+// Arabic alef maksura (ى, U+0649) and yeh (ي, U+064A) are interchanged
+// constantly in real-world titles — largely indistinguishable by sound in
+// colloquial/Egyptian Arabic and often typed as whichever is easier to
+// reach, with no meaning difference. Confirmed on "تملي معاك" by
+// "amr diab": "عمرو دياب - تملى معاك" (alef maksura) and several other
+// real uploads spelling it that way all failed the exact-token
+// song-name-in-title check against the "تملي" (yeh) spelling used in the
+// search, even though it's the same title — no different from treating
+// "u" and "you" as the same word in lib's SHORTHAND map above, just at
+// the letter level instead of the word level.
+const ALEF_MAKSURA_PATTERN = /ى/g;
+
+// Tatweel/kashida (ـ, U+0640) is a purely decorative letter-elongation
+// mark with no phonetic or semantic value — it's Unicode category "Lm"
+// (a modifier *letter*, not a combining mark), so unlike the diacritics
+// below it survives the general strip regex further down. Confirmed on a
+// real title, "تملي معـاك": the tatweel inserted inside "معاك" made it a
+// different string than the plain "معاك" being searched for, failing the
+// exact-token match despite being visually and semantically the same
+// word.
+const TATWEEL_PATTERN = /ـ/g;
+
 export function normalize(raw: string): string {
   return raw
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "") // strip accents: "Beyoncé" -> "Beyonce"
+    .replace(ALEF_MAKSURA_PATTERN, "ي")
+    .replace(TATWEEL_PATTERN, "")
     .replace(/\((official|lyric|lyrics|audio|music)[^)]*\)/gi, "")
     .replace(/\[(official|lyric|lyrics|audio|music)[^\]]*\]/gi, "")
     .replace(/\bfeat\.?\b/gi, "")
