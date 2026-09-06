@@ -240,9 +240,22 @@ export async function GET(request: Request) {
         // ordered artist-before-song, which alone flipped the tie-break
         // to suggest "Run DMC" by "Run" — equally nonsensical. A genuine
         // swap (Kamelot/Forever) had 36 supporting videos; this had 1.
+        //
+        // A bare "swappedOrder > directOrder" isn't actually "more than a
+        // bare majority" despite the name — it only rules out a single
+        // stray video via the floor above, not a corpus that's genuinely
+        // split close to evenly between both title conventions. Confirmed
+        // on "夜に駆ける" by "yoasobi" (a real, already-correct as-typed
+        // match): Japanese uploads mix "Artist - Song" and "Song / Artist"
+        // ordering almost evenly (16 vs 18 here), so the old check flipped
+        // an already-strong, correctly-typed match to a swap suggestion on
+        // a 2-video edge — and since both directions hit the same
+        // near-even split, swapping and resubmitting just flipped it back,
+        // an unresolvable ping-pong. Require the swapped ordering to be
+        // decisively — not barely — more common.
         const directOrder = countArtistBeforeSong(baseResults, trimmedSong, trimmedArtist);
         const swappedOrder = countArtistBeforeSong(baseResults, trimmedArtist, trimmedSong);
-        if (swappedOrder > directOrder && swappedOrder >= MIN_ORDER_CONFIRMATIONS) {
+        if (swappedOrder > directOrder * 2 && swappedOrder >= MIN_ORDER_CONFIRMATIONS) {
           return Response.json({
             status: "possible_swap",
             suggestedSong: trimmedArtist,

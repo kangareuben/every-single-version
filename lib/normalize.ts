@@ -69,6 +69,21 @@ const SHORTHAND_PATTERN = new RegExp(
   "gi",
 );
 
+// Bracket characters (ASCII and the CJK forms conventionally used to wrap
+// a song title, e.g. YOASOBI「夜に駆ける」) are always delimiters, never
+// part of a word — unlike an apostrophe, there's no contraction-style
+// case where deleting one instead of spacing it out is the correct
+// reading. Titles using them butted up against the surrounding text with
+// no space of their own (common in Japanese/Chinese titling, where words
+// aren't space-separated to begin with) would otherwise fuse into one
+// unmatchable blob once the bracket itself got deleted — confirmed on
+// that exact title: "YOASOBI「夜に駆ける」" normalized to "YOASOBI夜に駆ける"
+// (artist and song mashed into a single token), so neither wordOverlapRatio
+// nor phraseIndex could ever recognize "yoasobi" or "夜に駆ける" as their
+// own words, permanently defeating the song/artist swap-detection check in
+// both directions at once.
+const BRACKET_PATTERN = /[()[\]{}「」『』【】〈〉《》（）［］｛｝]/g;
+
 export function normalize(raw: string): string {
   return raw
     .normalize("NFD")
@@ -77,6 +92,7 @@ export function normalize(raw: string): string {
     .replace(/\[(official|lyric|lyrics|audio|music)[^\]]*\]/gi, "")
     .replace(/\bfeat\.?\b/gi, "")
     .replace(/\bft\.?\b/gi, "")
+    .replace(BRACKET_PATTERN, " ")
     .replace(/[^\p{L}\p{N}\s]/gu, "")
     .replace(SHORTHAND_PATTERN, (match) => SHORTHAND[match.toLowerCase()])
     .replace(/\s+/g, " ")
