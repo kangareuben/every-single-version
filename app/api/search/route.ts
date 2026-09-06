@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import { supabaseAnon, supabaseService } from "@/lib/supabase";
-import { isCloseMatch, normalize, wordsOf } from "@/lib/normalize";
+import { hasSignificantWord, isCloseMatch, normalize, wordsOf } from "@/lib/normalize";
 import { linkArtistToSong } from "@/lib/artists";
 import {
   countArtistBeforeSong,
@@ -96,6 +96,18 @@ export async function GET(request: Request) {
   // way the with-artist path does.
   if (!artistQuery) {
     return Response.json({ error: "artist is required" }, { status: 400 });
+  }
+
+  // A song name with no real words (symbols-only, e.g. "⊶⊚⊖⬚⊟") normalizes
+  // to "" — wordsOf(song) comes back empty, which makes the title-match
+  // check in filterResult() vacuously pass (Array.every on an empty array
+  // is always true), leaving only the artist name to gate results. Reject
+  // up front instead of silently crawling with a dead song-name filter.
+  if (!hasSignificantWord(wordsOf(songQuery))) {
+    return Response.json(
+      { error: "song must contain at least one real word" },
+      { status: 400 },
+    );
   }
 
   const normalizedSong = normalize(songQuery);
