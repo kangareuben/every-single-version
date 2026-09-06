@@ -110,6 +110,21 @@ export async function GET(request: Request) {
     );
   }
 
+  // Same failure mode on the artist side: a symbols-only artist name
+  // (e.g. "🪐") normalizes to "" too, so artistWords in filterResult()
+  // comes back empty and the with-artist phrase-proximity check never
+  // runs — it silently falls back to the same weak cover-signal-keyword
+  // path as "no artist given" (see comment above), which is exactly what
+  // let a garbled artist through and matched a pile of unrelated videos
+  // that merely contained a cover-signal keyword plus the (real) song
+  // name.
+  if (!hasSignificantWord(wordsOf(artistQuery))) {
+    return Response.json(
+      { error: "artist must contain at least one real word" },
+      { status: 400 },
+    );
+  }
+
   const normalizedSong = normalize(songQuery);
   const normalizedArtist = normalize(artistQuery);
 
