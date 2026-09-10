@@ -42,15 +42,6 @@ export async function searchVideos(
   url.searchParams.set("q", query);
   url.searchParams.set("type", "video");
   url.searchParams.set("maxResults", String(maxResults));
-  // YouTube's own default ("moderate") keyword-flags queries and suppresses
-  // results wholesale rather than filtering per-video — confirmed on "The
-  // New Pornographers" (a real, legitimate band): searched alone it
-  // returned zero results outright, while "Mass Romantic" alone (their
-  // actual song) returned plenty, several explicitly crediting the band by
-  // name. YouTube already moderates the videos themselves; deferred to
-  // that rather than losing entire legitimate artists to a keyword match
-  // on their name.
-  url.searchParams.set("safeSearch", "none");
   url.searchParams.set("key", process.env.YOUTUBE_API_KEY!);
 
   const res = await fetch(url.toString());
