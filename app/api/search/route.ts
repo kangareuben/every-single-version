@@ -35,6 +35,32 @@ function isRepeatedPhraseOf(longer: string[], shorter: string[]): boolean {
   return true;
 }
 
+// True when every word of `shorter` appears in `longer`, in the same
+// relative order, with other words allowed in between — e.g.
+// ["party","anthem"] is an ordered subsequence of ["party","rock","anthem"]
+// and of ["no","1","party","anthem"]. Requiring 2+ words on the shorter
+// side deliberately keeps this narrower than the word-count guard it sits
+// beside: a single common word (the exact case that guard exists to
+// reject — "queen" is not "killer queen", "take" is not "take on me") is
+// too weak a signal to ever count here, but a two-or-more-word phrase
+// naming a specific song is a real, precise fragment, not a coincidence.
+// Confirmed on real duplicates: "Party Anthem" and "Party Rock Anthem" by
+// LMFAO, and "Party Anthem" and "No. 1 Party Anthem" by Arctic Monkeys —
+// searching a title that's missing or short a word from the real one
+// (rather than a repeated phrase like "Money"/"Money Money Money" above)
+// still spawned a second entry for the same song under the old checks.
+// Still gated by confirmArtistForSong below, same as every other name
+// match — this only ever matters once the artist also matches.
+function isOrderedSubsequenceOf(longer: string[], shorter: string[]): boolean {
+  if (shorter.length < 2 || shorter.length >= longer.length) return false;
+  let i = 0;
+  for (const word of longer) {
+    if (word === shorter[i]) i++;
+    if (i === shorter.length) return true;
+  }
+  return false;
+}
+
 // Minimum videos required to trust the swap-tie-break's title-order
 // signal (see below) — one coincidental match shouldn't override the
 // as-typed reading.
@@ -158,7 +184,9 @@ export async function GET(request: Request) {
     return (
       candidateWords.length === songWords.length ||
       isRepeatedPhraseOf(candidateWords, songWords) ||
-      isRepeatedPhraseOf(songWords, candidateWords)
+      isRepeatedPhraseOf(songWords, candidateWords) ||
+      isOrderedSubsequenceOf(candidateWords, songWords) ||
+      isOrderedSubsequenceOf(songWords, candidateWords)
     );
   });
 
