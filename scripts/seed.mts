@@ -13,6 +13,7 @@
 import { SEED_SONGS } from "./seed-song-list";
 import { SEED_SONGS_2 } from "./seed-song-list-2";
 import { SEED_SONGS_3 } from "./seed-song-list-3";
+import { SEED_SONGS_4 } from "./seed-song-list-4";
 import { supabaseService } from "../lib/supabase";
 import { wordsOf, isCloseMatch } from "../lib/normalize";
 
@@ -74,7 +75,7 @@ let skippedAlreadyDone = 0;
 
 // Billboard #1s first, then the deeper popular-songs list once those are
 // exhausted — alreadySeeded() below makes this idempotent either way.
-const ALL_SEED_SONGS = [...SEED_SONGS, ...SEED_SONGS_2, ...SEED_SONGS_3];
+const ALL_SEED_SONGS = [...SEED_SONGS, ...SEED_SONGS_2, ...SEED_SONGS_3, ...SEED_SONGS_4];
 
 for (const { year, song, artist } of ALL_SEED_SONGS) {
   if (attempted >= count) break;
