@@ -384,9 +384,11 @@ export async function GET(request: Request) {
   }
 
   if (!artistConfirmed && normalizedArtist) {
+    const artistWords = wordsOf(normalizedArtist);
     const channelMatch = (videos ?? []).some(
       (v) =>
-        v.channel_title && normalize(v.channel_title).includes(normalizedArtist),
+        (v.channel_title && normalize(v.channel_title).includes(normalizedArtist)) ||
+        containsWordPhrase(wordsOf(v.title), artistWords),
     );
     if (channelMatch) {
       artistConfirmed = true;
