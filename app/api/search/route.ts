@@ -61,6 +61,21 @@ function isOrderedSubsequenceOf(longer: string[], shorter: string[]): boolean {
   return false;
 }
 
+function containsWordPhrase(words: string[], phrase: string[]): boolean {
+  if (phrase.length === 0) return false;
+  for (let i = 0; i <= words.length - phrase.length; i++) {
+    let match = true;
+    for (let j = 0; j < phrase.length; j++) {
+      if (words[i + j] !== phrase[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return true;
+  }
+  return false;
+}
+
 // Minimum videos required to trust the swap-tie-break's title-order
 // signal (see below) — one coincidental match shouldn't override the
 // as-typed reading.
@@ -97,12 +112,15 @@ async function confirmArtistForSong(
 
   const { data: videos } = await supabaseAnon
     .from("videos")
-    .select("channel_title")
+    .select("title, channel_title")
     .eq("song_id", songId)
     .eq("hidden", false);
 
+  const artistWords = wordsOf(normalizedArtist);
   return (videos ?? []).some(
-    (v) => v.channel_title && normalize(v.channel_title).includes(normalizedArtist),
+    (v) =>
+      (v.channel_title && normalize(v.channel_title).includes(normalizedArtist)) ||
+      containsWordPhrase(wordsOf(v.title), artistWords),
   );
 }
 
