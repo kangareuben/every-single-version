@@ -299,9 +299,24 @@ export async function GET(request: Request) {
         // near-even split, swapping and resubmitting just flipped it back,
         // an unresolvable ping-pong. Require the swapped ordering to be
         // decisively — not barely — more common.
+        //
+        // Still not enough on its own: confirmed on "Bloody Tears" by
+        // "Kenichi Matsubara" (also already correct as-typed) — a run of
+        // near-identical "How to play [Song] by [Artist]" sheet-music
+        // tutorial uploads (one per instrument: flute, oboe, tuba, cello,
+        // trumpet...) all share the same "Song by Artist" phrasing,
+        // swamping the normal "Artist - Song" convention by sheer volume
+        // (25 vs 5) even though the as-typed reading already had solid,
+        // non-negligible support of its own. The swapped order being
+        // dominant only means *one* convention dominates this title
+        // corpus — it says nothing about whether the as-typed reading is
+        // actually wrong. Only treat it as evidence of a mistake when the
+        // as-typed reading has barely any independent support to begin
+        // with; otherwise both conventions coexist for the same, correct
+        // pairing.
         const directOrder = countArtistBeforeSong(baseResults, trimmedSong, trimmedArtist);
         const swappedOrder = countArtistBeforeSong(baseResults, trimmedArtist, trimmedSong);
-        if (swappedOrder > directOrder * 2 && swappedOrder >= MIN_ORDER_CONFIRMATIONS) {
+        if (directOrder < MIN_ORDER_CONFIRMATIONS && swappedOrder > directOrder * 2 && swappedOrder >= MIN_ORDER_CONFIRMATIONS) {
           return Response.json({
             status: "possible_swap",
             suggestedSong: trimmedArtist,
