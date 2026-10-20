@@ -207,6 +207,7 @@ export async function crawlSong(
         description: result.description,
         durationSeconds: detail?.durationSeconds ?? null,
         categoryId: detail?.categoryId ?? null,
+        channelTitle: result.channelTitle,
       }).pass;
     });
 

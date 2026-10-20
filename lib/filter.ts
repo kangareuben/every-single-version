@@ -154,6 +154,7 @@ export interface FilterCandidate {
   description: string;
   durationSeconds: number | null;
   categoryId: string | null;
+  channelTitle: string | null;
 }
 
 export interface FilterResult {
@@ -218,34 +219,50 @@ export function filterResult(
     const artistStart = phraseIndex(titleWords, artistWords);
 
     if (artistStart === null) {
-      return { pass: false, reason: "artist not in title", isMusicCategory };
-    }
-
-    // Song and artist both appear as clean phrases, but could still be
-    // coincidental — e.g. a product listing mentioning "fluorescent
-    // light" and, in an unrelated clause much later, "stars". If the
-    // song forms a clean phrase too, require the artist phrase to start
-    // reasonably close to it — unless one phrase is just nested inside
-    // the other (see isContainmentArtifact), which proximity alone can't
-    // catch since a nested phrase is trivially "close" to its container.
-    const songStart = phraseIndex(titleWords, songWords);
-    if (songStart !== null) {
-      if (isContainmentArtifact(candidate.title, songName, artistName!)) {
-        return {
-          pass: false,
-          reason: "song/artist name only present inside the other",
-          isMusicCategory,
-        };
+      // YouTube's auto-generated "Topic" channels (the standard home for
+      // a song's official original audio) upload with the title set to
+      // just the song name — the artist lives only in channel_title
+      // ("Fellowship - Topic"), never in the title itself. Confirmed on
+      // Fellowship's "The Saint Beyond the River": the official upload
+      // was dropped entirely for failing this check, so only covers/
+      // live versions ever made it into the DB. Channel title is a
+      // reliable enough signal to accept on its own — there's no title
+      // position for it, so the proximity/containment checks below
+      // (which assume the artist appears somewhere in the title) don't
+      // apply to this path.
+      const channelMatch =
+        candidate.channelTitle &&
+        phraseIndex(wordsOf(candidate.channelTitle), artistWords) !== null;
+      if (!channelMatch) {
+        return { pass: false, reason: "artist not in title", isMusicCategory };
       }
+    } else {
+      // Song and artist both appear as clean phrases, but could still be
+      // coincidental — e.g. a product listing mentioning "fluorescent
+      // light" and, in an unrelated clause much later, "stars". If the
+      // song forms a clean phrase too, require the artist phrase to start
+      // reasonably close to it — unless one phrase is just nested inside
+      // the other (see isContainmentArtifact), which proximity alone can't
+      // catch since a nested phrase is trivially "close" to its container.
+      const songStart = phraseIndex(titleWords, songWords);
+      if (songStart !== null) {
+        if (isContainmentArtifact(candidate.title, songName, artistName!)) {
+          return {
+            pass: false,
+            reason: "song/artist name only present inside the other",
+            isMusicCategory,
+          };
+        }
 
-      const windowStart = Math.max(0, songStart - PROXIMITY_SLACK_WORDS);
-      const windowEnd = songStart + songWords.length + PROXIMITY_SLACK_WORDS;
-      if (artistStart < windowStart || artistStart >= windowEnd) {
-        return {
-          pass: false,
-          reason: "artist far from song name in title",
-          isMusicCategory,
-        };
+        const windowStart = Math.max(0, songStart - PROXIMITY_SLACK_WORDS);
+        const windowEnd = songStart + songWords.length + PROXIMITY_SLACK_WORDS;
+        if (artistStart < windowStart || artistStart >= windowEnd) {
+          return {
+            pass: false,
+            reason: "artist far from song name in title",
+            isMusicCategory,
+          };
+        }
       }
     }
   } else {
