@@ -1,0 +1,32 @@
+name: Supabase keepalive
+
+# Supabase free tier auto-pauses a project after 7 days with no API
+# activity. This pings the live production search endpoint (a cheap,
+# already-cached lookup — no new crawl, no YouTube quota used) twice a
+# week so that never happens.
+#
+# A Claude Code cloud routine was tried first but its sandbox's egress
+# proxy blocks arbitrary outbound hosts by default (both supabase.co
+# and vercel.app got connect_rejected) with no per-routine allowlist
+# available — GitHub's own runners have normal outbound access, so
+# this runs here instead.
+on:
+  schedule:
+    # Tue/Fri 03:00 UTC = Mon/Thu 11pm US/Eastern (cron is always UTC,
+    # so the day-of-week is shifted by one from the intended ET day).
+    - cron: "0 3 * * 2,5"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping production search endpoint
+        run: |
+          status=$(curl -s -o /dev/null -w '%{http_code}' \
+            'https://every-single-version.vercel.app/api/search?song=losing%20my%20religion&artist=rem')
+          echo "status=$status"
+          if [ "$status" -lt 200 ] || [ "$status" -ge 500 ]; then
+            echo "::error::keepalive ping failed with status $status"
+            exit 1
+          fi
