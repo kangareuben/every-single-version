@@ -1,8 +1,9 @@
-// Manually-triggered seeding script — NOT scheduled/automated by design
-// (see conversation: an unattended daily cron would compete with the
-// developer's own testing for the same 100-call/day YouTube quota, and
-// the crawl/filter pipeline is still actively having edge cases found
-// and fixed, which benefits from a human looking at each result).
+// Manually-triggered seeding script — NOT scheduled/automated by design.
+// Originally this was partly about quota (100 search.list units/day),
+// but that's no longer the binding constraint since the quota increase
+// to 10,000/day (Nov 2026) — it stays manual because the crawl/filter
+// pipeline is still actively having edge cases found and fixed, which
+// benefits from a human looking at each result.
 //
 // Usage: npx tsx --env-file=.env.local scripts/seed.mts [count]
 // Walks SEED_SONGS in order, skipping any song already well-populated
@@ -14,6 +15,7 @@ import { SEED_SONGS } from "./seed-song-list";
 import { SEED_SONGS_2 } from "./seed-song-list-2";
 import { SEED_SONGS_3 } from "./seed-song-list-3";
 import { SEED_SONGS_4 } from "./seed-song-list-4";
+import { SEED_SONGS_5 } from "./seed-song-list-5";
 import { supabaseService } from "../lib/supabase";
 import { wordsOf, isCloseMatch } from "../lib/normalize";
 
@@ -75,7 +77,7 @@ let skippedAlreadyDone = 0;
 
 // Billboard #1s first, then the deeper popular-songs list once those are
 // exhausted — alreadySeeded() below makes this idempotent either way.
-const ALL_SEED_SONGS = [...SEED_SONGS, ...SEED_SONGS_2, ...SEED_SONGS_3, ...SEED_SONGS_4];
+const ALL_SEED_SONGS = [...SEED_SONGS, ...SEED_SONGS_2, ...SEED_SONGS_3, ...SEED_SONGS_4, ...SEED_SONGS_5];
 
 for (const { year, song, artist } of ALL_SEED_SONGS) {
   if (attempted >= count) break;
