@@ -154,6 +154,35 @@ export function countArtistBeforeSong(
   }).length;
 }
 
+// True when some result's uploader channel is itself named after
+// `artistName` — most reliably YouTube's auto-generated "<Artist> -
+// Topic" channel, but also an artist's own official channel. This is
+// independent of title word order, so it corroborates the as-typed
+// artist even in genres where title order can't: instrumental/game-
+// soundtrack/classical content conventionally leads with the
+// recognizable piece name and trails with the (less famous) composer
+// — "Megalovania - Toby Fox", "Aerith's Theme - Nobuo Uematsu" — the
+// exact word order countArtistBeforeSong treats as swap evidence for
+// pop content, where it's actually "[Famous Artist] - [Song]". Title
+// order alone can't tell these apart (both look like "the second
+// phrase dominates"), but a real "Toby Fox - Topic" / "Nobuo Uematsu -
+// Topic" channel uploading these videos can't exist unless that's a
+// genuine artist, which a correctly-identified swap target (e.g. the
+// real song title typed into the artist field by mistake) never has.
+// Verified against a deliberate real swap ("Metallica" typed as the
+// song, "Enter Sandman" typed as the artist): zero results' channels
+// mention "Enter Sandman", so this never masks a genuine swap there.
+export function hasArtistChannelMatch(
+  results: YoutubeSearchResult[],
+  artistName: string,
+): boolean {
+  const artistWords = wordsOf(artistName);
+  if (!hasSignificantWord(artistWords)) return false;
+  return results.some(
+    (r) => phraseIndex(wordsOf(r.channelTitle), artistWords) !== null,
+  );
+}
+
 // Guards against two concurrent crawls of the same song (e.g. two users
 // searching the same brand-new song at once). A crawl that crashed
 // without clearing its lock is treated as expired after

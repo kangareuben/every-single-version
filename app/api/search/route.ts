@@ -6,6 +6,7 @@ import {
   countArtistBeforeSong,
   crawlSong,
   fetchBaseQueryResults,
+  hasArtistChannelMatch,
   hasStrongMatch,
 } from "@/lib/crawl";
 import type { YoutubeSearchResult } from "@/lib/youtube";
@@ -316,7 +317,23 @@ export async function GET(request: Request) {
         // pairing.
         const directOrder = countArtistBeforeSong(baseResults, trimmedSong, trimmedArtist);
         const swappedOrder = countArtistBeforeSong(baseResults, trimmedArtist, trimmedSong);
-        if (directOrder < MIN_ORDER_CONFIRMATIONS && swappedOrder > directOrder * 2 && swappedOrder >= MIN_ORDER_CONFIRMATIONS) {
+        if (
+          directOrder < MIN_ORDER_CONFIRMATIONS &&
+          swappedOrder > directOrder * 2 &&
+          swappedOrder >= MIN_ORDER_CONFIRMATIONS &&
+          // Title order alone can't tell a genuine swap from
+          // instrumental/game-soundtrack/classical content, which
+          // conventionally leads with the recognizable piece name and
+          // trails with the composer ("Megalovania - Toby Fox") — the
+          // same word order a real swap produces for pop content
+          // ("Wu-Tang Clan - Cream" when song/artist were typed
+          // backwards). An uploader channel actually named after the
+          // as-typed artist (typically YouTube's auto "<Artist> -
+          // Topic" channel) can't exist unless that's a genuine artist,
+          // which a true swap target never has — see
+          // hasArtistChannelMatch's own comment for the verification.
+          !hasArtistChannelMatch(baseResults, trimmedArtist)
+        ) {
           return Response.json({
             status: "possible_swap",
             suggestedSong: trimmedArtist,
