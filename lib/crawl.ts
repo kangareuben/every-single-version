@@ -93,6 +93,21 @@ function phraseIndex(words: string[], phrase: string[]): number | null {
   return null;
 }
 
+// A gap between two phrases made up entirely of these words is a
+// classical/instrumental-style credit ("[Piece] by [Composer]"), not
+// positional evidence of either the "Artist - Song" or "Song - Artist"
+// convention — see countArtistBeforeSong below.
+const CREDIT_CONNECTOR_WORDS = new Set([
+  "by",
+  "composed",
+  "composer",
+  "arranged",
+  "arranger",
+  "arr",
+  "music",
+  "score",
+]);
+
 // Counts results whose title has `artistName`'s phrase starting before
 // `songName`'s phrase — the "[Artist] - [Song]" convention real
 // performance/cover titles almost always follow. hasStrongMatch's bag-of-
@@ -102,6 +117,18 @@ function phraseIndex(words: string[], phrase: string[]): number | null {
 // reverse), so it independently confirms whichever orientation the user
 // typed, silently skipping swap detection. This breaks that tie using
 // title order instead of word presence.
+//
+// A title where the gap between the two phrases is pure connector words
+// ("by", "composed by", ...) doesn't count either way — it's a
+// "[Piece] by [Composer]" credit, a third convention distinct from
+// both "Artist - Song" and "Song - Artist". Confirmed on "The Legend of
+// Zelda Main Theme" by "Koji Kondo": instrumental/game-soundtrack
+// uploads almost never use the pop "Artist - Song" convention at all,
+// so the as-typed reading's directOrder was always near-zero regardless
+// of whether the pairing was right, while every "[Theme] By Koji Kondo"
+// upload counted as false swap evidence — without this exclusion, a
+// correct as-typed pairing in this genre gets flagged as a possible
+// swap essentially every time.
 export function countArtistBeforeSong(
   results: YoutubeSearchResult[],
   songName: string,
@@ -114,7 +141,16 @@ export function countArtistBeforeSong(
     const titleWords = wordsOf(result.title);
     const songStart = phraseIndex(titleWords, songWords);
     const artistStart = phraseIndex(titleWords, artistWords);
-    return songStart !== null && artistStart !== null && artistStart < songStart;
+    if (songStart === null || artistStart === null || artistStart >= songStart) {
+      return false;
+    }
+
+    const gap = titleWords.slice(artistStart + artistWords.length, songStart);
+    if (gap.length > 0 && gap.every((w) => CREDIT_CONNECTOR_WORDS.has(w))) {
+      return false;
+    }
+
+    return true;
   }).length;
 }
 
