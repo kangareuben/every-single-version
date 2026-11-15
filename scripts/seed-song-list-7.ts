@@ -59,10 +59,10 @@ export const SEED_SONGS_7: SeedSong[] = [
 
   // Gospel / spirituals — distinct from contemporary worship (list 5).
   { year: 1967, song: "Oh Happy Day", artist: "Edwin Hawkins Singers" },
-  { year: 1905, song: "His Eye Is on the Sparrow", artist: "Civilla Martin" },
-  { year: 1901, song: "Wade in the Water", artist: "Negro Spiritual" },
-  { year: 1865, song: "Down by the Riverside", artist: "Negro Spiritual" },
-  { year: 1909, song: "Swing Low, Sweet Chariot", artist: "Negro Spiritual" },
+  { year: 1905, song: "His Eye Is on the Sparrow", artist: "Mahalia Jackson" },
+  { year: 1901, song: "Wade in the Water", artist: "Fisk Jubilee Singers" },
+  { year: 1865, song: "Down by the Riverside", artist: "Fisk Jubilee Singers" },
+  { year: 1909, song: "Swing Low, Sweet Chariot", artist: "Fisk Jubilee Singers" },
   { year: 1972, song: "Precious Lord, Take My Hand", artist: "Thomas A. Dorsey" },
   { year: 1990, song: "I'll Fly Away", artist: "Albert E. Brumley" },
   { year: 1997, song: "I Can Only Imagine", artist: "MercyMe" },
@@ -84,14 +84,14 @@ export const SEED_SONGS_7: SeedSong[] = [
   { year: 2010, song: "Rolling Girl", artist: "Hatsune Miku" },
   { year: 1984, song: "Plastic Love", artist: "Mariya Takeuchi" },
   { year: 1981, song: "Stay with Me", artist: "Miki Matsubara" },
-  { year: 1980, song: "Tokyo Night Club", artist: "Yellow Magic Orchestra" },
+  { year: 1979, song: "Rydeen", artist: "Yellow Magic Orchestra" },
 
   // Mandopop / Cantopop.
   { year: 2003, song: "Qing Hua Ci", artist: "Jay Chou" },
-  { year: 2000, song: "Love Before the 7th Grade", artist: "Jay Chou" },
+  { year: 2001, song: "Simple Love", artist: "Jay Chou" },
   { year: 1980, song: "The Moon Represents My Heart", artist: "Teresa Teng" },
   { year: 1994, song: "Red Bean", artist: "Faye Wong" },
-  { year: 1993, song: "A Thousand Dreams of You", artist: "Faye Wong" },
+  { year: 1999, song: "Eyes on Me", artist: "Faye Wong" },
 
   // More video game themes beyond lists 5/6's selection.
   { year: 1996, song: "Pokemon Theme", artist: "Jason Paige" },
@@ -101,7 +101,7 @@ export const SEED_SONGS_7: SeedSong[] = [
   { year: 2011, song: "Sweden", artist: "C418" },
   { year: 2015, song: "Hopes and Dreams", artist: "Toby Fox" },
   { year: 2002, song: "Dearly Beloved", artist: "Yoko Shimomura" },
-  { year: 1990, song: "Tetris Theme (Korobeiniki)", artist: "Hirokazu Tanaka" },
+  { year: 1990, song: "Tetris Theme (Korobeiniki)", artist: "" },
   { year: 2007, song: "Still Alive", artist: "Jonathan Coulton" },
 
   // Bossa nova / Brazilian.
@@ -128,7 +128,7 @@ export const SEED_SONGS_7: SeedSong[] = [
 
   // Viral sea-shanty / folk-revival trend.
   { year: 1830, song: "The Wellerman", artist: "Traditional" },
-  { year: 1850, song: "Drunken Sailor", artist: "Traditional" },
-  { year: 1700, song: "Scarborough Fair", artist: "Traditional" },
+  { year: 1850, song: "Drunken Sailor", artist: "" },
+  { year: 1966, song: "Scarborough Fair", artist: "Simon & Garfunkel" },
   { year: 1600, song: "Greensleeves", artist: "Traditional" },
 ];
