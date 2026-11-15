@@ -14,7 +14,7 @@
 // --env-file is only needed because lib/crawl.ts's import chain reaches
 // lib/supabase.ts, which constructs its client eagerly at module load.
 import type { YoutubeSearchResult } from "../lib/youtube";
-import { countArtistBeforeSong, hasArtistChannelMatch } from "../lib/crawl";
+import { countArtistBeforeSong, hasArtistChannelMatch, hasStrongMatch } from "../lib/crawl";
 import { parseArtistFromTitle } from "../lib/artist-parse";
 import { filterResult } from "../lib/filter";
 
@@ -104,6 +104,44 @@ function result(title: string, channelTitle: string): YoutubeSearchResult {
   check(
     "hasArtistChannelMatch: swap control, fake artist='Enter Sandman' (no real channel)",
     hasArtistChannelMatch(metallicaSwap, "Enter Sandman"),
+    false,
+  );
+}
+
+// --- hasStrongMatch: channel-title fallback ----------------------------
+
+{
+  // Confirmed on "Down by the Riverside" by "Fisk Jubilee Singers":
+  // every real "The Fisk Jubilee Singers - Topic" upload has a bare
+  // title, so without a channel fallback this gate aborted the crawl
+  // before it ever reached filterResult's own channel-title handling.
+  const riverside = [
+    result("Down By The Riverside", "The Fisk Jubilee Singers - Topic"),
+    result("Vestal and Jubilee Choir Down By The Riverside", "Cody Sisler"),
+  ];
+  check(
+    "hasStrongMatch: channel-title fallback accepts a bare-title official upload",
+    hasStrongMatch(riverside, "Down by the Riverside", "Fisk Jubilee Singers"),
+    true,
+  );
+}
+
+{
+  // Confirmed on "Run" by "Run DMC" (not a real song): the channel
+  // fallback above initially regressed this control — the real "Run
+  // D.M.C. - Topic" channel's unrelated upload "Hit It Run" satisfied
+  // both the song match (title contains "run") and the new channel
+  // match (channel contains "Run DMC"), with zero actual connection.
+  // Needs the same structural containment guard as the title path, just
+  // checking the song name against the artist's own name instead of
+  // against a title.
+  const runDmc = [
+    result("Hit It Run", "Run D.M.C. - Topic"),
+    result("It's Tricky", "Run-D.M.C."),
+  ];
+  check(
+    "hasStrongMatch: channel-title fallback still rejects a containment artifact",
+    hasStrongMatch(runDmc, "Run", "Run DMC"),
     false,
   );
 }

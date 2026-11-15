@@ -101,7 +101,6 @@ export const SEED_SONGS_7: SeedSong[] = [
   { year: 2011, song: "Sweden", artist: "C418" },
   { year: 2015, song: "Hopes and Dreams", artist: "Toby Fox" },
   { year: 2002, song: "Dearly Beloved", artist: "Yoko Shimomura" },
-  { year: 1990, song: "Tetris Theme (Korobeiniki)", artist: "" },
   { year: 2007, song: "Still Alive", artist: "Jonathan Coulton" },
 
   // Bossa nova / Brazilian.
@@ -128,7 +127,7 @@ export const SEED_SONGS_7: SeedSong[] = [
 
   // Viral sea-shanty / folk-revival trend.
   { year: 1830, song: "The Wellerman", artist: "Traditional" },
-  { year: 1850, song: "Drunken Sailor", artist: "" },
+  { year: 1850, song: "Drunken Sailor", artist: "The Irish Rovers" },
   { year: 1966, song: "Scarborough Fair", artist: "Simon & Garfunkel" },
   { year: 1600, song: "Greensleeves", artist: "Traditional" },
 ];

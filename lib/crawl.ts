@@ -38,10 +38,21 @@ export async function fetchBaseQueryResults(
 // Guards against generic/obscure searches (e.g. a one-word song title by an
 // artist with no real YouTube presence) where per-video filtering is too
 // weak on its own — a single common word can satisfy it against totally
-// unrelated content. Checked against the TITLE only, not description: the
-// description is a much noisier signal (tangential mentions, unrelated
-// comparisons) that can pass this check for content about something else
-// entirely.
+// unrelated content. The song side is checked against the TITLE only, not
+// description: the description is a much noisier signal (tangential
+// mentions, unrelated comparisons) that can pass this check for content
+// about something else entirely.
+//
+// The artist side also accepts a channel-title match as a fallback, same
+// as filterResult's own channel-title fallback and for the same reason:
+// a YouTube auto-generated "<Artist> - Topic" channel uploads with the
+// title set to just the song name, artist only in channel_title.
+// Confirmed on "Down by the Riverside" by "Fisk Jubilee Singers": every
+// real "The Fisk Jubilee Singers - Topic" upload has a bare title, so
+// without this fallback this gate aborted the crawl before it ever
+// reached filterResult's own (already-fixed) handling of that same
+// pattern — the abort happens earlier, so that later fix never got a
+// chance to run.
 export function hasStrongMatch(
   results: YoutubeSearchResult[],
   songName: string,
@@ -62,21 +73,37 @@ export function hasStrongMatch(
 
   return results.some((result) => {
     const songMatch = wordOverlapRatio(result.title, songWords) >= STRONG_MATCH_THRESHOLD;
-    const artistMatch =
-      artistWords.length === 0 ||
-      wordOverlapRatio(result.title, artistWords) >= STRONG_MATCH_THRESHOLD;
-    if (!songMatch || !artistMatch) return false;
+    if (!songMatch) return false;
 
-    // Bag-of-words alone can't tell that a "match" is really just the
-    // song name being a substring of the artist name (or vice versa) —
-    // confirmed on "Run" by Run DMC: nearly all of Run-DMC's real,
-    // unrelated songs ("It's Tricky", "Walk This Way", ...) satisfied
-    // both checks purely because "Run" is literally part of "Run DMC",
-    // with no song called "Run" actually existing.
-    if (artistWords.length > 0 && isContainmentArtifact(result.title, songName, artistHint!)) {
-      return false;
+    if (artistWords.length === 0) return true;
+
+    const artistMatchInTitle = wordOverlapRatio(result.title, artistWords) >= STRONG_MATCH_THRESHOLD;
+    if (artistMatchInTitle) {
+      // Bag-of-words alone can't tell that a "match" is really just the
+      // song name being a substring of the artist name (or vice versa) —
+      // confirmed on "Run" by Run DMC: nearly all of Run-DMC's real,
+      // unrelated songs ("It's Tricky", "Walk This Way", ...) satisfied
+      // both checks purely because "Run" is literally part of "Run DMC",
+      // with no song called "Run" actually existing. Only applies to a
+      // title-text match — a channel-only match below has no title
+      // substring relationship to be a containment artifact of.
+      return !isContainmentArtifact(result.title, songName, artistHint!);
     }
-    return true;
+
+    const channelMatch =
+      phraseIndex(wordsOf(result.channelTitle), artistWords) !== null ||
+      normalizeCompact(result.channelTitle).includes(normalizeCompact(artistHint!));
+    if (!channelMatch) return false;
+
+    // Structural counterpart to the title-text containment check above:
+    // if the song name is simply a sub-phrase of the artist's own name,
+    // a channel match proves nothing about this specific song — it's
+    // just restating the artist's name. Confirmed on "Run" by "Run
+    // DMC" again: the real "Run D.M.C. - Topic" channel's own upload
+    // "Hit It Run" satisfied the channel match (its channel name
+    // contains "Run DMC") and the song match (its title contains
+    // "Run"), with zero actual connection between them.
+    return phraseIndex(artistWords, songWords) === null;
   });
 }
 
