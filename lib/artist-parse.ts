@@ -26,13 +26,61 @@ function stripParentheticals(segment: string): string {
   return segment.replace(/\([^)]*\)/g, "").replace(/\[[^\]]*\]/g, "");
 }
 
-function stripCoverKeywords(segment: string): string {
+// Words that describe a video's format/content, never an artist's own
+// name — distinct from COVER_SIGNAL_KEYWORDS's job (flagging a video as
+// cover-like for filtering) since here they're pure noise to delete.
+// Confirmed on real titles: "Pink Floyd Guitar Solo" and "Guitar Lesson"
+// both leaked verbatim into song_artists as "artist" names before these
+// were stripped.
+const DESCRIPTOR_WORDS = [
+  "version",
+  "solo",
+  "lesson",
+  "tutorial",
+  "guitar",
+  "piano",
+  "drum",
+  "drums",
+  "bass",
+  "vocal",
+  "vocals",
+  "demo",
+];
+
+function stripDescriptorKeywords(segment: string): string {
   let result = segment;
-  for (const keyword of COVER_SIGNAL_KEYWORDS) {
+  for (const keyword of [...COVER_SIGNAL_KEYWORDS, ...DESCRIPTOR_WORDS]) {
     result = result.replace(new RegExp(`\\b${keyword}\\b`, "gi"), "");
   }
   return result.replace(/\s+/g, " ").trim();
 }
+
+// "X cover by Y" / "X performed by Y" names the actual performer AFTER
+// "by", not before — confirmed on "Shine On You Crazy Diamond (Pink
+// Floyd cover by Alexa Melo)": the real cover artist is Alexa Melo, but
+// without this the whole "Pink Floyd by Alexa Melo" blob was kept.
+function preferAfterBy(segment: string): string {
+  const match = segment.match(/\bby\b/i);
+  if (!match || match.index === undefined) return segment;
+  return segment.slice(match.index + match[0].length).trim();
+}
+
+// A trailing "at <venue>", "on <tour/date>", "in <place>", "from
+// <event>", or "with <someone>" clause describes the recording's
+// context, not the artist's name — confirmed on "Pink Floyd at London
+// Earls Court" (a live-recording venue credit) and "Not2Series on
+// Sessions Halloween Special" (an event name), both of which leaked in
+// whole as "artist" names. Only a non-leading match counts: a name that
+// itself starts with one of these words (e.g. "At the Drive-In") is
+// handled by stripLeadingFillerWords below instead of being cut open.
+const TRAILING_CONTEXT_PATTERN = /\b(at|on|in|from|with)\b/i;
+function truncateAtContextWord(segment: string): string {
+  const match = segment.match(TRAILING_CONTEXT_PATTERN);
+  if (!match || match.index === undefined || match.index === 0) return segment;
+  return segment.slice(0, match.index).trim();
+}
+
+const MAX_CANDIDATE_WORDS = 5;
 
 function stripLeadingFillerWords(segment: string): string {
   let result = segment.trim();
@@ -51,14 +99,23 @@ function stripLeadingFillerWords(segment: string): string {
 }
 
 // Rejects candidates too mangled to plausibly be a name — empty after
-// stripping, no letters at all, or a single stray character/symbol.
+// stripping, no letters at all, a single stray character/symbol, a
+// "/"-delimited metadata blob (dates, event listings — e.g. "11/4/17" or
+// "From Norwich / 1998"), or implausibly long (real artist names are
+// rarely more than a few words; a longer survivor is almost always a
+// run-on descriptive phrase that slipped past the other checks).
 function isPlausibleName(candidate: string): boolean {
-  return candidate.length >= 2 && /\p{L}/u.test(candidate);
+  if (candidate.length < 2 || !/\p{L}/u.test(candidate)) return false;
+  if (candidate.includes("/")) return false;
+  if (candidate.split(" ").filter(Boolean).length > MAX_CANDIDATE_WORDS) return false;
+  return true;
 }
 
 function cleanCandidate(raw: string): string | null {
   const cleaned = stripLeadingFillerWords(
-    stripCoverKeywords(stripParentheticals(raw)),
+    truncateAtContextWord(
+      preferAfterBy(stripDescriptorKeywords(stripParentheticals(raw))),
+    ),
   );
   return isPlausibleName(cleaned) ? cleaned : null;
 }
