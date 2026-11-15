@@ -18,7 +18,7 @@ export const SEED_SONGS_5: SeedSong[] = [
   // categories on YouTube (solo covers, a cappella, orchestral, kids).
   { year: 2013, song: "Let It Go", artist: "Idina Menzel" },
   { year: 2003, song: "Defying Gravity", artist: "Idina Menzel" },
-  { year: 2015, song: "Alexander Hamilton", artist: "Lin-Manuel Miranda" },
+  { year: 2015, song: "Alexander Hamilton", artist: "Leslie Odom Jr." },
   { year: 2015, song: "My Shot", artist: "Lin-Manuel Miranda" },
   { year: 2015, song: "Wait for It", artist: "Leslie Odom Jr." },
   { year: 1996, song: "Seasons of Love", artist: "Rent" },
@@ -123,7 +123,7 @@ export const SEED_SONGS_5: SeedSong[] = [
   { year: 1981, song: "The Number of the Beast", artist: "Iron Maiden" },
   { year: 1980, song: "Crazy Train", artist: "Ozzy Osbourne" },
   { year: 1969, song: "Paranoid", artist: "Black Sabbath" },
-  { year: 2000, song: "Blackened Is the Color", artist: "Nightwish" },
+  { year: 1999, song: "Sleeping Sun", artist: "Nightwish" },
   { year: 2004, song: "Nemo", artist: "Nightwish" },
   { year: 2007, song: "Amaranth", artist: "Nightwish" },
   { year: 1999, song: "Through the Fire and Flames", artist: "DragonForce" },
