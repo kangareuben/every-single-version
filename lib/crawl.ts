@@ -3,7 +3,7 @@ import { searchVideos, getVideoDetails, type YoutubeSearchResult } from "./youtu
 import { filterResult, isContainmentArtifact } from "./filter";
 import { parseArtistFromTitle } from "./artist-parse";
 import { linkArtistToSong } from "./artists";
-import { wordsOf, wordOverlapRatio, hasSignificantWord, normalize } from "./normalize";
+import { wordsOf, wordOverlapRatio, hasSignificantWord, normalizeCompact } from "./normalize";
 
 const LOCK_STALE_MINUTES = 10;
 const RESULTS_PER_QUERY = 50; // API max per call; same 100-unit cost regardless
@@ -172,21 +172,11 @@ export function countArtistBeforeSong(
 // Verified against a deliberate real swap ("Metallica" typed as the
 // song, "Enter Sandman" typed as the artist): zero results' channels
 // mention "Enter Sandman", so this never masks a genuine swap there.
-// All whitespace removed on top of normalize()'s own cleanup, so initials
-// match regardless of spacing style. normalize() deletes punctuation
-// (including periods) without inserting a replacement space, so "A.R."
-// (typed with no space between initials) collapses to one token "ar",
-// while "A. R." (a space between them, as YouTube itself renders the
-// auto-generated "A. R. Rahman - Topic" channel) stays two tokens "a"
-// "r" — the exact same name, but a different token sequence depending
-// on incidental styling. Confirmed on "A.R. Rahman": the word-level
-// phraseIndex check below missed that real "A. R. Rahman - Topic"
-// channel entirely because of this spacing mismatch, letting a
-// correctly-typed pairing get flagged as a possible swap.
-function normalizeCompact(text: string): string {
-  return normalize(text).toLowerCase().replace(/\s+/g, "");
-}
-
+// Also checked via normalizeCompact (see its own comment in normalize.ts)
+// so an abbreviated name matches regardless of spacing style — confirmed
+// on "A.R. Rahman": the word-level phraseIndex check alone missed the
+// real "A. R. Rahman - Topic" channel because of exactly this mismatch,
+// letting a correctly-typed pairing get flagged as a possible swap.
 export function hasArtistChannelMatch(
   results: YoutubeSearchResult[],
   artistName: string,

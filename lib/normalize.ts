@@ -127,6 +127,24 @@ export function wordsOf(text: string): string[] {
   return normalize(text).toLowerCase().split(" ").filter(Boolean);
 }
 
+// All whitespace removed on top of normalize()'s own cleanup, so initials
+// match regardless of spacing style. normalize() deletes punctuation
+// (including periods) without inserting a replacement space, so "A.R."
+// (typed with no space between initials) collapses to one token "ar",
+// while "A. R." (a space between them, as YouTube itself renders some
+// auto-generated "<Artist> - Topic" channels) stays two tokens "a" "r" —
+// the exact same name, but a different token sequence depending on
+// incidental styling. wordsOf-based phrase matching misses this; compare
+// the fully-compacted forms instead wherever that matters. Confirmed on
+// "A.R. Rahman": a real official upload on the "A. R. Rahman - Topic"
+// channel was both (a) wrongly dropped by filterResult's channel-title
+// fallback (title is bare, artist only lives in channel_title) and (b)
+// unable to corroborate the artist for swap-detection, in both cases
+// purely because of this spacing mismatch.
+export function normalizeCompact(text: string): string {
+  return normalize(text).toLowerCase().replace(/\s+/g, "");
+}
+
 // Fraction of `words` that appear as whole words somewhere in `text`.
 export function wordOverlapRatio(text: string, words: string[]): number {
   if (words.length === 0) return 0;

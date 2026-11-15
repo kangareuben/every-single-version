@@ -16,6 +16,7 @@
 import type { YoutubeSearchResult } from "../lib/youtube";
 import { countArtistBeforeSong, hasArtistChannelMatch } from "../lib/crawl";
 import { parseArtistFromTitle } from "../lib/artist-parse";
+import { filterResult } from "../lib/filter";
 
 let passed = 0;
 let failed = 0;
@@ -104,6 +105,55 @@ function result(title: string, channelTitle: string): YoutubeSearchResult {
     "hasArtistChannelMatch: swap control, fake artist='Enter Sandman' (no real channel)",
     hasArtistChannelMatch(metallicaSwap, "Enter Sandman"),
     false,
+  );
+}
+
+// --- filterResult: channel-title fallback ------------------------------
+
+{
+  // The original case this fallback was built for — a YouTube auto-
+  // generated "Topic" channel upload with a bare title (artist only in
+  // channel_title). Confirmed on "The Saint Beyond the River" by
+  // "Fellowship": without this fallback the official original-audio
+  // upload was dropped entirely.
+  check(
+    "filterResult: Topic-channel fallback accepts a bare-title official upload",
+    filterResult("The Saint Beyond the River", "Fellowship", {
+      title: "The Saint Beyond the River",
+      description: "",
+      durationSeconds: 300,
+      categoryId: "10",
+      channelTitle: "Fellowship - Topic",
+    }).pass,
+    true,
+  );
+
+  check(
+    "filterResult: Topic-channel fallback still rejects an unrelated channel",
+    filterResult("The Saint Beyond the River", "Fellowship", {
+      title: "The Saint Beyond the River",
+      description: "",
+      durationSeconds: 300,
+      categoryId: "10",
+      channelTitle: "Some Unrelated Channel",
+    }).pass,
+    false,
+  );
+
+  // Same initials-spacing mismatch as the hasArtistChannelMatch case
+  // above, but here it's the crawl/filter pipeline itself (not just
+  // swap-detection) wrongly dropping a real official upload — confirmed
+  // on "Nadaan Parinde" by "A.R. Rahman".
+  check(
+    "filterResult: Topic-channel fallback tolerates initials-spacing mismatch",
+    filterResult("Nadaan Parinde", "A.R. Rahman", {
+      title: "Nadaan Parinde",
+      description: "",
+      durationSeconds: 240,
+      categoryId: "10",
+      channelTitle: "A. R. Rahman - Topic",
+    }).pass,
+    true,
   );
 }
 

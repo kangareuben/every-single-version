@@ -1,4 +1,4 @@
-import { wordsOf } from "./normalize";
+import { wordsOf, normalizeCompact } from "./normalize";
 
 // Starting point per the plan, not final — tune against real search
 // results once the crawl job has run against a variety of songs.
@@ -230,9 +230,17 @@ export function filterResult(
       // position for it, so the proximity/containment checks below
       // (which assume the artist appears somewhere in the title) don't
       // apply to this path.
+      // Also checked via normalizeCompact (see its own comment in
+      // normalize.ts) so an abbreviated name matches regardless of
+      // spacing style — confirmed on "A.R. Rahman": a real original-
+      // audio upload on the "A. R. Rahman - Topic" channel was wrongly
+      // dropped by the word-level check alone, purely because the
+      // artist was typed with no space between initials ("A.R.") while
+      // that channel renders them with one ("A. R.").
       const channelMatch =
         candidate.channelTitle &&
-        phraseIndex(wordsOf(candidate.channelTitle), artistWords) !== null;
+        (phraseIndex(wordsOf(candidate.channelTitle), artistWords) !== null ||
+          normalizeCompact(candidate.channelTitle).includes(normalizeCompact(artistName!)));
       if (!channelMatch) {
         return { pass: false, reason: "artist not in title", isMusicCategory };
       }
