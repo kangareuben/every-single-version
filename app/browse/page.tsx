@@ -15,7 +15,7 @@ interface SongEntry {
 type BrowseState =
   | { phase: "loading" }
   | { phase: "error"; message: string }
-  | { phase: "results"; songs: SongEntry[] };
+  | { phase: "results"; songs: SongEntry[]; hasMore: boolean };
 
 const DEBOUNCE_MS = 300;
 
@@ -45,6 +45,7 @@ const REQUEST_TIMEOUT_MS = 15000;
 export default function Browse() {
   const [query, setQuery] = useState("");
   const [state, setState] = useState<BrowseState>({ phase: "loading" });
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -65,7 +66,7 @@ export default function Browse() {
           return;
         }
 
-        setState({ phase: "results", songs: data.songs ?? [] });
+        setState({ phase: "results", songs: data.songs ?? [], hasMore: Boolean(data.hasMore) });
       } catch (err) {
         if ((err as Error).name === "AbortError") {
           if (timedOut) {
@@ -84,6 +85,47 @@ export default function Browse() {
       controller.abort();
     };
   }, [query]);
+
+  async function loadMore() {
+    if (state.phase !== "results" || !state.hasMore || isLoadingMore) return;
+    setIsLoadingMore(true);
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeoutTimer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, REQUEST_TIMEOUT_MS);
+    try {
+      const params = new URLSearchParams({ offset: String(state.songs.length) });
+      if (query.trim()) params.set("q", query.trim());
+      const res = await fetch(`/api/browse?${params.toString()}`, { signal: controller.signal });
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        setState({ phase: "error", message: data.error ?? "Something went wrong." });
+        return;
+      }
+
+      setState((prev) =>
+        prev.phase === "results"
+          ? {
+              phase: "results",
+              songs: [...prev.songs, ...(data.songs ?? [])],
+              hasMore: Boolean(data.hasMore),
+            }
+          : prev,
+      );
+    } catch (err) {
+      if ((err as Error).name === "AbortError") {
+        if (timedOut) setState({ phase: "error", message: "That took too long. Try again." });
+        return;
+      }
+      setState({ phase: "error", message: "Couldn't reach the server." });
+    } finally {
+      clearTimeout(timeoutTimer);
+      setIsLoadingMore(false);
+    }
+  }
 
   return (
     <div className="flex flex-1 flex-col items-center bg-zinc-50 font-sans dark:bg-black">
@@ -149,6 +191,16 @@ export default function Browse() {
               );
             })}
           </ul>
+        )}
+
+        {state.phase === "results" && state.hasMore && (
+          <button
+            onClick={loadMore}
+            disabled={isLoadingMore}
+            className="rounded-full border border-black/[.08] px-5 py-2 text-sm text-black disabled:opacity-50 dark:border-white/[.145] dark:text-zinc-50"
+          >
+            {isLoadingMore ? "Loading…" : "Load more"}
+          </button>
         )}
 
         <div className="flex gap-4 text-sm text-zinc-500 dark:text-zinc-500">

@@ -1,6 +1,14 @@
 import { supabaseAnon } from "@/lib/supabase";
 
-const RESULT_LIMIT = 100;
+const PAGE_SIZE = 100;
+// Safety cap on rows fetched before the in-JS filter/sort/paginate below;
+// catalog is nowhere near this (under 1000 songs), so this never bites.
+const MAX_ROWS = 5000;
+
+function parseOffset(url: URL): number {
+  const raw = Number(url.searchParams.get("offset"));
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
+}
 
 const SELECT =
   "id, canonical_name, created_at, primary_artist:artists!primary_artist_id(name), song_artists(artists(name)), videos(count)";
@@ -68,18 +76,17 @@ export async function GET(request: Request) {
   const q = url.searchParams.get("q")?.trim();
 
   if (!q) {
-    const { data, error } = await supabaseAnon
-      .from("songs")
-      .select(SELECT)
-      .limit(RESULT_LIMIT * 2); // headroom for the zero-video filter below
+    const { data, error } = await supabaseAnon.from("songs").select(SELECT).limit(MAX_ROWS);
 
     if (error) return Response.json({ error: error.message }, { status: 500 });
-    const songs = (data as unknown as SongRow[])
+    const allSongs = (data as unknown as SongRow[])
       .map(toEntry)
       .filter(hasVideos)
-      .sort(byPrimaryArtist)
-      .slice(0, RESULT_LIMIT);
-    return Response.json({ songs });
+      .sort(byPrimaryArtist);
+    const offset = parseOffset(url);
+    const songs = allSongs.slice(offset, offset + PAGE_SIZE);
+    const hasMore = offset + PAGE_SIZE < allSongs.length;
+    return Response.json({ songs, hasMore });
   }
 
   // Song name and artist name live in different tables, so a single query
@@ -113,11 +120,10 @@ export async function GET(request: Request) {
     }
   }
 
-  const songs = [...merged.values()]
-    .map(toEntry)
-    .filter(hasVideos)
-    .sort(byPrimaryArtist)
-    .slice(0, RESULT_LIMIT);
+  const allSongs = [...merged.values()].map(toEntry).filter(hasVideos).sort(byPrimaryArtist);
+  const offset = parseOffset(url);
+  const songs = allSongs.slice(offset, offset + PAGE_SIZE);
+  const hasMore = offset + PAGE_SIZE < allSongs.length;
 
-  return Response.json({ songs });
+  return Response.json({ songs, hasMore });
 }
