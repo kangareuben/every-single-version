@@ -5,22 +5,20 @@ import { COVER_SIGNAL_KEYWORDS } from "./filter";
 // "Song - Artist Cover", "Artist - Song (Live)", "Song (Artist Cover)".
 // Expect misses on anything more creative than that.
 
-// Words that commonly precede a name in a title ("cover by Sally Kim",
-// "Radiohead - Creep [live in Milan]") but aren't part of the name itself.
-const LEADING_FILLER_WORDS = [
-  "by",
-  "ft",
-  "feat",
-  "featuring",
-  "performed",
-  "in",
-  "at",
-  "on",
-  "of",
-  "for",
-  "from",
-  "with",
-];
+// Words that reliably introduce a name right after them ("cover by Sally
+// Kim", "feat. Otis Taylor", German "Cover von Otis Taylor") — safe to
+// strip and trust whatever follows as the name itself.
+const LEADING_FILLER_WORDS = ["by", "ft", "feat", "featuring", "performed", "von"];
+
+// Words that almost always introduce a PLACE or EVENT, not a name — unlike
+// the words above, stripping these and trusting the remainder is wrong far
+// more often than right, so a *leading* occurrence disqualifies the whole
+// candidate instead (see isPlausibleName). Confirmed leaking venue/show
+// text in whole as "artist" names on real "Hey Joe" uploads: "Live At
+// Monterey", "Live At Berkeley - 2nd Show, 10PM", "Live At The Isle Of
+// Wight", "Live At Winterland, San Francisco, CA", "Live at SPACE,
+// Evanston, Illinois".
+const LEADING_CONTEXT_WORDS = ["at", "on", "in", "from", "with", "of", "for"];
 
 function stripParentheticals(segment: string): string {
   return segment.replace(/\([^)]*\)/g, "").replace(/\[[^\]]*\]/g, "");
@@ -45,6 +43,9 @@ const DESCRIPTOR_WORDS = [
   "vocal",
   "vocals",
   "demo",
+  "tab",
+  "tabs",
+  "riff",
 ];
 
 function stripDescriptorKeywords(segment: string): string {
@@ -101,23 +102,38 @@ function stripLeadingFillerWords(segment: string): string {
 // Rejects candidates too mangled to plausibly be a name — empty after
 // stripping, no letters at all, a single stray character/symbol, a
 // "/"-delimited metadata blob (dates, event listings — e.g. "11/4/17" or
-// "From Norwich / 1998"), or implausibly long (real artist names are
-// rarely more than a few words; a longer survivor is almost always a
-// run-on descriptive phrase that slipped past the other checks).
-function isPlausibleName(candidate: string): boolean {
+// "From Norwich / 1998"), implausibly long (real artist names are rarely
+// more than a few words; a longer survivor is almost always a run-on
+// descriptive phrase that slipped past the other checks), led by one of
+// LEADING_CONTEXT_WORDS (truncateAtContextWord deliberately leaves a
+// *leading* occurrence alone — see its comment — so it falls to this
+// check instead of being stripped-and-trusted), a standalone 4-digit year
+// (not a model number like "Blink-182" — confirmed on "12 Marzo 2012
+// @ClockTowerPub" and "Otis Taylor ... New York CIty 2013"), or so
+// overlapping with the song's own name that it's clearly a repeat of the
+// title (an album/opus name, not an artist — confirmed on "Hey Joe Opus
+// Red Meat"). That last check only fires once every word of a multi-word
+// song name shows up in the candidate — a single shared word (e.g. "Joe"
+// in both "Hey Joe" and "Joe Cocker & Otis Taylor") is just a coincidence.
+function isPlausibleName(candidate: string, songWords: string[]): boolean {
   if (candidate.length < 2 || !/\p{L}/u.test(candidate)) return false;
   if (candidate.includes("/")) return false;
-  if (candidate.split(" ").filter(Boolean).length > MAX_CANDIDATE_WORDS) return false;
+  const words = candidate.split(" ").filter(Boolean);
+  if (words.length > MAX_CANDIDATE_WORDS) return false;
+  if (LEADING_CONTEXT_WORDS.includes(words[0].toLowerCase())) return false;
+  if (words.some((w) => /^(19|20)\d{2}$/.test(w))) return false;
+  const candidateWords = wordsOf(candidate);
+  if (songWords.length > 1 && songWords.every((w) => candidateWords.includes(w))) return false;
   return true;
 }
 
-function cleanCandidate(raw: string): string | null {
+function cleanCandidate(raw: string, songWords: string[]): string | null {
   const cleaned = stripLeadingFillerWords(
     truncateAtContextWord(
       preferAfterBy(stripDescriptorKeywords(stripParentheticals(raw))),
     ),
   );
-  return isPlausibleName(cleaned) ? cleaned : null;
+  return isPlausibleName(cleaned, songWords) ? cleaned : null;
 }
 
 // Splits on any dash/pipe separator at once (not one type at a time), so
@@ -155,7 +171,7 @@ export function parseArtistFromTitle(
       );
 
       for (const i of candidateIndexes) {
-        const candidate = cleanCandidate(segments[i]);
+        const candidate = cleanCandidate(segments[i], songWords);
         if (candidate) return candidate;
       }
     }
@@ -164,7 +180,7 @@ export function parseArtistFromTitle(
   const parenMatch = rawTitle.match(/\(([^)]+)\)/);
   if (parenMatch) {
     const inner = parenMatch[1];
-    const candidate = cleanCandidate(inner);
+    const candidate = cleanCandidate(inner, songWords);
     if (candidate && candidate.toLowerCase() !== inner.toLowerCase()) {
       return candidate;
     }
