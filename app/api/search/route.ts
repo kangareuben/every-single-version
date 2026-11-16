@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import { supabaseAnon, supabaseService } from "@/lib/supabase";
-import { hasSignificantWord, isCloseMatch, normalize, wordsOf } from "@/lib/normalize";
+import { hasSignificantWord, isCloseMatch, normalize, normalizeCompact, wordsOf } from "@/lib/normalize";
 import { linkArtistToSong } from "@/lib/artists";
 import {
   countArtistBeforeSong,
@@ -118,10 +118,19 @@ async function confirmArtistForSong(
     .eq("hidden", false);
 
   const artistWords = wordsOf(normalizedArtist);
+  // normalize() strips hyphens/periods/slashes with no replacement space, so
+  // a title segment like "Taylor-Feat-JoeCocker" fuses into one token
+  // ("taylorfeatjoecocker") instead of staying "taylor" "feat" "joecocker" —
+  // containsWordPhrase then can't find "taylor" as its own word. Same bug
+  // class as lib/crawl.ts and lib/filter.ts's channel-title fallbacks;
+  // confirmed on "Hey Joe" by "Otis Taylor": a real Hendrix-row video titled
+  // "Otis Taylor-Feat-JoeCocker performs..." should have confirmed Otis
+  // Taylor for that row, but didn't, spawning a duplicate "Hey Joe" entry.
   return (videos ?? []).some(
     (v) =>
       (v.channel_title && normalize(v.channel_title).includes(normalizedArtist)) ||
-      containsWordPhrase(wordsOf(v.title), artistWords),
+      containsWordPhrase(wordsOf(v.title), artistWords) ||
+      normalizeCompact(v.title).includes(normalizeCompact(normalizedArtist)),
   );
 }
 
@@ -417,10 +426,13 @@ export async function GET(request: Request) {
 
   if (!artistConfirmed && normalizedArtist) {
     const artistWords = wordsOf(normalizedArtist);
+    // Same normalizeCompact fallback as confirmArtistForSong above, and for
+    // the same reason — see its comment.
     const channelMatch = (videos ?? []).some(
       (v) =>
         (v.channel_title && normalize(v.channel_title).includes(normalizedArtist)) ||
-        containsWordPhrase(wordsOf(v.title), artistWords),
+        containsWordPhrase(wordsOf(v.title), artistWords) ||
+        normalizeCompact(v.title).includes(normalizeCompact(normalizedArtist)),
     );
     if (channelMatch) {
       artistConfirmed = true;
