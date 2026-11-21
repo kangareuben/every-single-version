@@ -4,11 +4,14 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
+type VersionClassification = "original" | "cover" | "unknown";
+
 interface Video {
   id: string;
   video_id: string;
   title: string;
   channel_title: string;
+  classification: VersionClassification;
 }
 
 interface SearchResponse {
@@ -154,9 +157,11 @@ function HomeInner() {
   const [songInput, setSongInput] = useState("");
   const [artistInput, setArtistInput] = useState("");
   const [state, setState] = useState<SearchState>({ phase: "idle" });
+  const [showCoversOnly, setShowCoversOnly] = useState(false);
 
   async function runSearch(song: string, artist: string) {
     setState({ phase: "loading" });
+    setShowCoversOnly(false);
 
     const params = new URLSearchParams({ song });
     if (artist) params.set("artist", artist);
@@ -306,14 +311,35 @@ function HomeInner() {
 
         {state.phase === "results" && state.videos.length > 0 && (
           <div className="flex w-full flex-col items-center gap-4">
-            <p className="text-sm text-zinc-500 dark:text-zinc-500">
-              {state.videos.length} version
-              {state.videos.length === 1 ? "" : "s"} of &quot;
-              {state.canonicalName}&quot;:
-            </p>
-            {state.videos.map((video) => (
-              <VideoCard key={video.id} video={video} />
-            ))}
+            {(() => {
+              const coverCount = state.videos.filter((v) => v.classification === "cover").length;
+              const shown = showCoversOnly
+                ? state.videos.filter((v) => v.classification === "cover")
+                : state.videos;
+
+              return (
+                <>
+                  <div className="flex w-full items-center justify-between gap-3">
+                    <p className="text-sm text-zinc-500 dark:text-zinc-500">
+                      {shown.length} version{shown.length === 1 ? "" : "s"} of &quot;
+                      {state.canonicalName}&quot;:
+                    </p>
+                    {coverCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowCoversOnly((v) => !v)}
+                        className="shrink-0 rounded-full border border-black/[.08] px-3 py-1 text-xs font-medium text-black hover:bg-black/[.04] dark:border-white/[.145] dark:text-zinc-50 dark:hover:bg-white/[.08]"
+                      >
+                        {showCoversOnly ? "Show all" : `Covers only (${coverCount})`}
+                      </button>
+                    )}
+                  </div>
+                  {shown.map((video) => (
+                    <VideoCard key={video.id} video={video} />
+                  ))}
+                </>
+              );
+            })()}
           </div>
         )}
 

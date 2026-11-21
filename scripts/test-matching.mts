@@ -17,6 +17,7 @@ import type { YoutubeSearchResult } from "../lib/youtube";
 import { countArtistBeforeSong, hasArtistChannelMatch, hasStrongMatch } from "../lib/crawl";
 import { parseArtistFromTitle } from "../lib/artist-parse";
 import { filterResult } from "../lib/filter";
+import { classifyVersion, interleaveByClassification } from "../lib/version-classify";
 
 let passed = 0;
 let failed = 0;
@@ -245,6 +246,84 @@ const parseCases: [string, string, string | null][] = [
 for (const [title, song, expected] of parseCases) {
   check(`parseArtistFromTitle: ${JSON.stringify(title)}`, parseArtistFromTitle(title, song), expected);
 }
+
+// --- classifyVersion -----------------------------------------------------
+
+check(
+  "classifyVersion: searched artist performing their own song is 'original'",
+  classifyVersion({ title: "Jimi Hendrix - Hey Joe", channelTitle: "x" }, "Hey Joe", "Jimi Hendrix"),
+  "original",
+);
+
+check(
+  "classifyVersion: a different named performer is 'cover'",
+  classifyVersion({ title: "Otis Taylor - Hey Joe", channelTitle: "x" }, "Hey Joe", "Jimi Hendrix"),
+  "cover",
+);
+
+{
+  // isCloseMatch alone (edit-distance) rejects this pair outright — needs
+  // the word-set containment fallback so the artist's own full billing
+  // isn't mistaken for a different, unrelated act.
+  const classification = classifyVersion(
+    { title: "The Jimi Hendrix Experience - Hey Joe", channelTitle: "x" },
+    "Hey Joe",
+    "Jimi Hendrix",
+  );
+  check(
+    "classifyVersion: fuller billing of the same artist is still 'original'",
+    classification,
+    "original",
+  );
+}
+
+check(
+  "classifyVersion: a bare-title 'Topic' channel upload is 'original'",
+  classifyVersion(
+    { title: "Hey Joe", channelTitle: "Jimi Hendrix - Topic" },
+    "Hey Joe",
+    "Jimi Hendrix",
+  ),
+  "original",
+);
+
+check(
+  "classifyVersion: unparseable title + cover-signal keyword falls back to 'cover'",
+  classifyVersion(
+    { title: "Hey Joe (Acoustic Cover)", channelTitle: "RandomChannel123" },
+    "Hey Joe",
+    "Jimi Hendrix",
+  ),
+  "cover",
+);
+
+check(
+  "classifyVersion: no parseable artist, no channel match, no cover keyword is 'unknown'",
+  classifyVersion({ title: "Hey Joe", channelTitle: "SomeRandomChannel" }, "Hey Joe", "Jimi Hendrix"),
+  "unknown",
+);
+
+// --- interleaveByClassification -------------------------------------------
+
+{
+  const items = [
+    { label: "o1", classification: "original" as const },
+    { label: "o2", classification: "original" as const },
+    { label: "o3", classification: "original" as const },
+    { label: "c1", classification: "cover" as const },
+  ];
+  check(
+    "interleaveByClassification: a lone cover surfaces first, not buried after the originals",
+    interleaveByClassification(items).map((i) => i.label),
+    ["c1", "o1", "o2", "o3"],
+  );
+}
+
+check(
+  "interleaveByClassification: empty input stays empty",
+  interleaveByClassification([]),
+  [],
+);
 
 // --- summary -------------------------------------------------------------
 

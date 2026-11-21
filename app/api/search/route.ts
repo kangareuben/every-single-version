@@ -10,6 +10,7 @@ import {
   hasStrongMatch,
 } from "@/lib/crawl";
 import type { YoutubeSearchResult } from "@/lib/youtube";
+import { classifyVersion, interleaveByClassification } from "@/lib/version-classify";
 
 const STALE_HOURS = 24;
 
@@ -478,12 +479,25 @@ export async function GET(request: Request) {
     }
   }
 
+  // Classify each version relative to the artist actually searched (not a
+  // fixed "primary" artist) — searching "Hey Joe" by "Otis Taylor" should
+  // bucket Otis Taylor's own takes as "original" and Hendrix's as "cover",
+  // even though Hendrix is the song's primary_artist_id.
+  const classifiedVideos = (videos ?? []).map((v) => ({
+    ...v,
+    classification: classifyVersion(
+      { title: v.title, channelTitle: v.channel_title },
+      canonicalName,
+      artistQuery!.trim(),
+    ),
+  }));
+
   return Response.json({
     status: isNewSong ? "new_song_crawled" : "cache_hit",
     songId,
     canonicalName,
     artistConfirmed,
     stale,
-    videos,
+    videos: interleaveByClassification(classifiedVideos),
   });
 }
